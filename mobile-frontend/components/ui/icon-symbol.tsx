@@ -1,41 +1,51 @@
-// Fallback for using MaterialIcons on Android and web.
+// Vector icon component using MaterialIcons
 
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
-import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-type IconSymbolName = keyof typeof MAPPING;
+type IconName = ComponentProps<typeof MaterialIcons>['name'];
 
-/**
- * Add your SF Symbols to Material Icons mappings here.
- * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
- * - see SF Symbols in the [SF Symbols](https://developer.apple.com/sf-symbols/) app.
- */
-const MAPPING = {
-  'house.fill': 'home',
-  'paperplane.fill': 'send',
-  'chevron.left.forwardslash.chevron.right': 'code',
-  'chevron.right': 'chevron-right',
-} as IconMapping;
+// Icon mapping for consistent naming across the app
+const ICONS = {
+  home: 'home' as IconName,
+  inventory: 'inventory' as IconName,
+  history: 'history' as IconName,
+  settings: 'settings' as IconName,
+  add: 'add' as IconName,
+  close: 'close' as IconName,
+  chevronRight: 'chevron-right' as IconName,
+  chevronLeft: 'chevron-left' as IconName,
+  chevronDown: 'keyboard-arrow-down' as IconName,
+  check: 'check' as IconName,
+  edit: 'edit' as IconName,
+  delete: 'delete' as IconName,
+  search: 'search' as IconName,
+  moreVert: 'more-vert' as IconName,
+  calendar: 'calendar-today' as IconName,
+  person: 'person' as IconName,
+  attachMoney: 'attach-money' as IconName,
+  list: 'list' as IconName,
+  folder: 'folder' as IconName,
+  print: 'print' as IconName,
+  share: 'share' as IconName,
+  restaurant: 'restaurant' as IconName,
+  localGroceryStore: 'local-grocery-store' as IconName,
+  category: 'category' as IconName,
+  save: 'save' as IconName,
+  pdfExport: 'picture-as-pdf' as IconName,
+  accessTime: 'access-time' as IconName,
+} as const;
 
-/**
- * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.
- * This ensures a consistent look across platforms, and optimal resource usage.
- * Icon `name`s are based on SF Symbols and require manual mapping to Material Icons.
- */
-export function IconSymbol({
-  name,
-  size = 24,
-  color,
-  style,
-}: {
-  name: IconSymbolName;
+export type IconKey = keyof typeof ICONS;
+
+interface IconSymbolProps {
+  name: IconKey;
   size?: number;
   color: string | OpaqueColorValue;
   style?: StyleProp<TextStyle>;
-  weight?: SymbolWeight;
-}) {
-  return <MaterialIcons color={color} size={size} name={MAPPING[name]} style={style} />;
+}
+
+export function IconSymbol({ name, size = 24, color, style }: IconSymbolProps) {
+  return <MaterialIcons color={color} size={size} name={ICONS[name]} style={style} />;
 }
