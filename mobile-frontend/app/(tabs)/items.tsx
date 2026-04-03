@@ -1,7 +1,7 @@
 /**
  * Items Tab - Preset Items Management
  * 
- * Manage saved items with preset prices. Mom picks from these
+ * Manage saved items with preset prices. Cashiers pick from these
  * when adding items to inventory sessions.
  */
 
@@ -14,15 +14,14 @@ import {
   Modal,
   Alert,
   RefreshControl,
-  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/use-auth';
 import { Title, Subtitle, Body, Caption, Label } from '@/components/text';
-import { Card, CardContent, Button, Input, NumberInput } from '@/components/ui';
+import { Button, Input, NumberInput } from '@/components/ui';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/colors';
+import { Colors, Shadows } from '@/constants/colors';
 import { Spacing, BorderRadius } from '@/constants/spacing';
 import { formatCurrency } from '@/utils/format';
 import { getPresetsByUser, createPreset, updatePreset, deletePreset } from '@/lib/db';
@@ -158,25 +157,33 @@ export default function ItemsScreen() {
   const rawInventoryItems = presets.filter(p => p.category === 'raw_inventory');
   const menuItems = presets.filter(p => p.category !== 'raw_inventory');
 
-  const renderPresetItem = ({ item }: { item: PresetItem }) => (
-    <TouchableOpacity
-      onPress={() => openEditModal(item)}
-      onLongPress={() => handleDelete(item)}
-      activeOpacity={0.7}
-    >
-      <Card variant="outlined" style={styles.presetCard}>
-        <CardContent style={styles.presetContent}>
-          <View style={styles.presetInfo}>
-            <Body style={styles.presetName}>{item.item_name}</Body>
-            <Caption color="textMuted">
-              {formatCurrency(parseFloat(item.default_price || '0'))}
-            </Caption>
-          </View>
-          <IconSymbol name="chevronRight" size={20} color={Colors.textMuted} />
-        </CardContent>
-      </Card>
-    </TouchableOpacity>
-  );
+  const renderPresetItem = (item: PresetItem, index: number, items: PresetItem[]) => {
+    const isFirst = index === 0;
+    const isLast = index === items.length - 1;
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        onPress={() => openEditModal(item)}
+        onLongPress={() => handleDelete(item)}
+        activeOpacity={0.7}
+        style={[
+          styles.presetCard,
+          isFirst && styles.presetCardFirst,
+          isLast && styles.presetCardLast,
+          !isLast && styles.presetCardBorder,
+        ]}
+      >
+        <View style={styles.presetInfo}>
+          <Body style={styles.presetName}>{item.item_name}</Body>
+          <Caption color="textMuted">
+            {formatCurrency(parseFloat(item.default_price || '0'))}
+          </Caption>
+        </View>
+        <IconSymbol name="chevronRight" size={18} color={Colors.textMuted} />
+      </TouchableOpacity>
+    );
+  };
 
   const renderSection = (title: string, items: PresetItem[], icon: 'restaurant' | 'localGroceryStore') => {
     if (items.length === 0) return null;
@@ -184,15 +191,21 @@ export default function ItemsScreen() {
     return (
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <IconSymbol name={icon} size={18} color={Colors.textSecondary} />
-          <Subtitle style={styles.sectionTitle}>{title}</Subtitle>
-          <Caption color="textMuted">{items.length}</Caption>
-        </View>
-        {items.map((item) => (
-          <View key={item.id}>
-            {renderPresetItem({ item })}
+          <View style={[styles.sectionIcon, { backgroundColor: icon === 'restaurant' ? Colors.primary + '15' : Colors.secondary + '10' }]}>
+            <IconSymbol 
+              name={icon} 
+              size={16} 
+              color={icon === 'restaurant' ? Colors.primary : Colors.secondary} 
+            />
           </View>
-        ))}
+          <Subtitle style={styles.sectionTitle}>{title}</Subtitle>
+          <View style={styles.countBadge}>
+            <Caption style={styles.countText}>{items.length}</Caption>
+          </View>
+        </View>
+        <View style={styles.sectionList}>
+          {items.map((item, index) => renderPresetItem(item, index, items))}
+        </View>
       </View>
     );
   };
@@ -201,13 +214,16 @@ export default function ItemsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Title>My Items</Title>
+        <View>
+          <Title style={styles.headerTitle}>My Items</Title>
+          <Caption color="textMuted">Preset items for quick entry</Caption>
+        </View>
         <TouchableOpacity
           style={styles.addButton}
           onPress={openAddModal}
           activeOpacity={0.7}
         >
-          <IconSymbol name="add" size={24} color={Colors.accentForeground} />
+          <IconSymbol name="add" size={22} color={Colors.primaryForeground} />
         </TouchableOpacity>
       </View>
 
@@ -218,21 +234,28 @@ export default function ItemsScreen() {
         </View>
       ) : presets.length === 0 ? (
         <View style={styles.centerContent}>
-          <IconSymbol name="category" size={48} color={Colors.textMuted} />
+          <View style={styles.emptyIcon}>
+            <IconSymbol name="category" size={40} color={Colors.textMuted} />
+          </View>
           <Subtitle color="textMuted" style={styles.emptyTitle}>No items yet</Subtitle>
           <Body color="textMuted" style={styles.emptyText}>
             Add your inventory items and menu items here.{'\n'}
-            They'll be available to pick when tracking.
+            They'll be available when tracking.
           </Body>
-          <Button onPress={openAddModal} style={styles.emptyButton}>
-            Add First Item
-          </Button>
+          <TouchableOpacity 
+            style={styles.emptyButton}
+            onPress={openAddModal}
+            activeOpacity={0.7}
+          >
+            <Body style={styles.emptyButtonText}>Add First Item</Body>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
           data={[]}
           renderItem={() => null}
           contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
           }
@@ -240,6 +263,7 @@ export default function ItemsScreen() {
             <>
               {renderSection('Raw Inventory', rawInventoryItems, 'localGroceryStore')}
               {renderSection('Menu Items', menuItems, 'restaurant')}
+              <View style={{ height: 120 }} />
             </>
           }
         />
@@ -255,12 +279,21 @@ export default function ItemsScreen() {
         <SafeAreaView style={styles.modalContainer}>
           {/* Modal Header */}
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={closeModal}>
-              <Body color="primary">Cancel</Body>
+            <TouchableOpacity onPress={closeModal} style={styles.modalHeaderButton}>
+              <Body color="textSecondary">Cancel</Body>
             </TouchableOpacity>
-            <Subtitle>{editingPreset ? 'Edit Item' : 'Add Item'}</Subtitle>
-            <TouchableOpacity onPress={handleSave} disabled={saving}>
-              <Body color={saving ? 'textMuted' : 'primary'} style={{ fontWeight: '600' }}>
+            <Subtitle style={styles.modalTitle}>
+              {editingPreset ? 'Edit Item' : 'Add Item'}
+            </Subtitle>
+            <TouchableOpacity 
+              onPress={handleSave} 
+              disabled={saving}
+              style={styles.modalHeaderButton}
+            >
+              <Body style={[
+                styles.saveText,
+                saving && { color: Colors.textMuted }
+              ]}>
                 {saving ? 'Saving...' : 'Save'}
               </Body>
             </TouchableOpacity>
@@ -288,16 +321,17 @@ export default function ItemsScreen() {
                     formData.category === 'menu_item' && styles.categoryOptionSelected,
                   ]}
                   onPress={() => setFormData({ ...formData, category: 'menu_item' })}
+                  activeOpacity={0.7}
                 >
                   <IconSymbol
                     name="restaurant"
                     size={20}
                     color={formData.category === 'menu_item' ? Colors.primary : Colors.textMuted}
                   />
-                  <Body
-                    color={formData.category === 'menu_item' ? 'primary' : 'textSecondary'}
-                    style={styles.categoryLabel}
-                  >
+                  <Body style={[
+                    styles.categoryLabel,
+                    { color: formData.category === 'menu_item' ? Colors.primary : Colors.textSecondary }
+                  ]}>
                     Menu Item
                   </Body>
                 </TouchableOpacity>
@@ -307,16 +341,17 @@ export default function ItemsScreen() {
                     formData.category === 'raw_inventory' && styles.categoryOptionSelected,
                   ]}
                   onPress={() => setFormData({ ...formData, category: 'raw_inventory' })}
+                  activeOpacity={0.7}
                 >
                   <IconSymbol
                     name="localGroceryStore"
                     size={20}
                     color={formData.category === 'raw_inventory' ? Colors.primary : Colors.textMuted}
                   />
-                  <Body
-                    color={formData.category === 'raw_inventory' ? 'primary' : 'textSecondary'}
-                    style={styles.categoryLabel}
-                  >
+                  <Body style={[
+                    styles.categoryLabel,
+                    { color: formData.category === 'raw_inventory' ? Colors.primary : Colors.textSecondary }
+                  ]}>
                     Raw Inventory
                   </Body>
                 </TouchableOpacity>
@@ -334,16 +369,16 @@ export default function ItemsScreen() {
 
             {/* Delete button for editing */}
             {editingPreset && (
-              <Button
-                variant="destructive"
+              <TouchableOpacity
                 style={styles.deleteButton}
                 onPress={() => {
                   closeModal();
                   handleDelete(editingPreset);
                 }}
+                activeOpacity={0.7}
               >
-                Delete Item
-              </Button>
+                <Body style={styles.deleteButtonText}>Delete Item</Body>
+              </TouchableOpacity>
             )}
           </View>
         </SafeAreaView>
@@ -361,19 +396,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.lg,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 2,
   },
   addButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.accent,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Shadows.small,
   },
   centerContent: {
     flex: 1,
@@ -381,22 +420,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: Spacing.xl,
   },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
   emptyTitle: {
-    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
   },
   emptyText: {
     textAlign: 'center',
-    marginTop: Spacing.sm,
     lineHeight: 22,
   },
   emptyButton: {
     marginTop: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.lg,
+  },
+  emptyButtonText: {
+    color: Colors.primaryForeground,
+    fontWeight: '600',
   },
   listContent: {
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.sm,
   },
   section: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -404,22 +460,58 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginBottom: Spacing.sm,
   },
+  sectionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sectionTitle: {
     flex: 1,
+    fontWeight: '600',
+  },
+  countBadge: {
+    backgroundColor: Colors.borderLight,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  countText: {
+    color: Colors.textMuted,
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  sectionList: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    ...Shadows.small,
   },
   presetCard: {
-    marginBottom: Spacing.sm,
-  },
-  presetContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  presetCardFirst: {
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+  },
+  presetCardLast: {
+    borderBottomLeftRadius: BorderRadius.lg,
+    borderBottomRightRadius: BorderRadius.lg,
+  },
+  presetCardBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
   },
   presetInfo: {
     flex: 1,
   },
   presetName: {
     fontWeight: '500',
+    marginBottom: 2,
   },
   // Modal styles
   modalContainer: {
@@ -433,17 +525,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.borderLight,
     backgroundColor: Colors.surface,
   },
+  modalHeaderButton: {
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
+  },
+  modalTitle: {
+    fontWeight: '600',
+  },
+  saveText: {
+    color: Colors.primary,
+    fontWeight: '600',
+  },
   modalContent: {
-    padding: Spacing.md,
+    padding: Spacing.lg,
   },
   fieldContainer: {
     marginBottom: Spacing.md,
   },
   fieldLabel: {
-    marginBottom: 6,
+    marginBottom: 8,
+    fontWeight: '500',
   },
   categoryPicker: {
     flexDirection: 'row',
@@ -456,19 +560,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.sm,
     paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.default,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
   categoryOptionSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
+    backgroundColor: Colors.primary + '08',
   },
   categoryLabel: {
     fontWeight: '500',
   },
   deleteButton: {
     marginTop: Spacing.xl,
+    paddingVertical: Spacing.md,
+    alignItems: 'center',
+    backgroundColor: Colors.errorLight,
+    borderRadius: BorderRadius.lg,
+  },
+  deleteButtonText: {
+    color: Colors.error,
+    fontWeight: '600',
   },
 });

@@ -1,53 +1,90 @@
 /**
  * Color Palette - JB Inventory Tracker
- * Design System: Minimalist Flat Design
+ * Design System: Minimalist iOS-style
+ * Theme: Orange / Black / White (JB Chicken Branding)
  * Light Mode Only
  */
 
 export const Colors = {
-  // Primary - Teal (Productivity, Trust)
-  primary: '#0D9488',
+  // Primary - Orange (JB Chicken Brand)
+  primary: '#FF6B00',
+  primaryLight: '#FF8534',
+  primaryDark: '#E55A00',
   primaryForeground: '#FFFFFF',
 
-  // Secondary
-  secondary: '#14B8A6',
-  secondaryForeground: '#0F172A',
+  // Secondary - Black
+  secondary: '#1A1A1A',
+  secondaryForeground: '#FFFFFF',
 
-  // Accent/CTA - Orange (Action, Warmth)
-  accent: '#EA580C',
+  // Accent - Same as primary for consistency
+  accent: '#FF6B00',
   accentForeground: '#FFFFFF',
 
   // Surfaces
-  background: '#FAFAFA',
+  background: '#F5F5F5',
   surface: '#FFFFFF',
   card: '#FFFFFF',
+  surfaceElevated: '#FFFFFF',
 
   // Text Hierarchy
-  textPrimary: '#0F172A',     // Slate 900
-  textSecondary: '#475569',   // Slate 600
-  textMuted: '#94A3B8',       // Slate 400
+  textPrimary: '#1A1A1A',     // Near black
+  textSecondary: '#666666',   // Dark gray
+  textMuted: '#999999',       // Medium gray
+  textLight: '#CCCCCC',       // Light gray
 
   // Feedback States
-  success: '#10B981',
+  success: '#22C55E',
+  successLight: '#DCFCE7',
   successForeground: '#FFFFFF',
   warning: '#F59E0B',
+  warningLight: '#FEF3C7',
   warningForeground: '#FFFFFF',
-  error: '#DC2626',
+  error: '#EF4444',
+  errorLight: '#FEE2E2',
   errorForeground: '#FFFFFF',
 
   // Borders & Dividers
-  border: '#E2E8F0',          // Slate 200
-  borderStrong: '#CBD5E1',    // Slate 300
+  border: '#E5E5E5',
+  borderLight: '#F0F0F0',
+  borderStrong: '#D4D4D4',
 
   // Table-specific
-  tableHeader: '#F1F5F9',     // Slate 100
-  tableRowAlt: '#F8FAFC',     // Slate 50
+  tableHeader: '#F5F5F5',
+  tableRowAlt: '#FAFAFA',
 
   // Special
-  overlay: 'rgba(0, 0, 0, 0.5)',
-  disabled: '#94A3B8',
-  disabledBg: '#F1F5F9',
+  overlay: 'rgba(0, 0, 0, 0.4)',
+  disabled: '#CCCCCC',
+  disabledBg: '#F5F5F5',
+  
+  // Shadows (for elevated elements)
+  shadowColor: '#000000',
 } as const;
 
 // Type for TypeScript autocomplete
 export type ColorKey = keyof typeof Colors;
+
+// Shadow presets for iOS-style elevation
+export const Shadows = {
+  small: {
+    shadowColor: Colors.shadowColor,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: Colors.shadowColor,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  large: {
+    shadowColor: Colors.shadowColor,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+} as const;

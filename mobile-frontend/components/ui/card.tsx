@@ -14,8 +14,8 @@ import {
   PressableProps,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { Colors } from '@/constants/colors';
-import { Spacing, BorderRadius, Shadows } from '@/constants/spacing';
+import { Colors, Shadows as ColorShadows } from '@/constants/colors';
+import { Spacing, BorderRadius } from '@/constants/spacing';
 
 export interface CardProps extends Omit<PressableProps, 'style'> {
   children: React.ReactNode;
@@ -105,7 +105,7 @@ export function CardFooter({ children, style }: CardFooterProps) {
 const styles = StyleSheet.create({
   base: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.lg,
     overflow: 'hidden',
   },
   padding: {
@@ -114,15 +114,14 @@ const styles = StyleSheet.create({
 
   // Variants
   default: {
-    ...Shadows.card,
+    ...ColorShadows.small,
   },
   elevated: {
-    ...Shadows.modal,
+    ...ColorShadows.medium,
   },
   outlined: {
     borderWidth: 1,
     borderColor: Colors.border,
-    ...Shadows.none,
   },
 
   // States
@@ -135,7 +134,7 @@ const styles = StyleSheet.create({
   header: {
     paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.borderLight,
     marginBottom: Spacing.sm,
   },
   content: {
@@ -144,7 +143,7 @@ const styles = StyleSheet.create({
   footer: {
     paddingTop: Spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: Colors.border,
+    borderTopColor: Colors.borderLight,
     marginTop: Spacing.sm,
   },
 });

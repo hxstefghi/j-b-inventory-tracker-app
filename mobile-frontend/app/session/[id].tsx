@@ -29,7 +29,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Title, Subtitle, Body, Caption, Label } from '@/components/text';
 import { Button, Card, CardContent, Input } from '@/components/ui';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/colors';
+import { Colors, Shadows } from '@/constants/colors';
 import { Spacing, BorderRadius } from '@/constants/spacing';
 import { FontSizes, FontFamilies } from '@/constants/typography';
 import { formatCurrency, formatDateLong } from '@/utils/format';
@@ -110,7 +110,9 @@ export default function SessionDetailScreen() {
     if (field === 'ending' || field === 'total') return;
     
     try {
-      await updateItem(itemId, { [field]: value });
+      // Convert empty strings to null for PostgreSQL numeric columns
+      const dbValue = value === '' ? null : value;
+      await updateItem(itemId, { [field]: dbValue });
       
       // Update local state
       setItems(prev =>
@@ -130,16 +132,16 @@ export default function SessionDetailScreen() {
     try {
       const selectedItems = presets.filter(p => selectedPresets.has(p.id));
       
-      // Create items with empty values (will show as "-")
+      // Create items with null values (will show as "-" in UI)
       const newItems = selectedItems.map((preset, idx) => ({
         session_id: id,
         item_name: preset.item_name,
         price: preset.default_price || '0',
-        beg_balance: '',
-        delivery: '',
-        pull_out: '',
-        sold_out: '',
-        remarks: '',
+        beg_balance: null,
+        delivery: null,
+        pull_out: null,
+        sold_out: null,
+        remarks: null,
         sort_order: items.length + idx,
       }));
 
@@ -558,55 +560,66 @@ function TableRow({ item, index, isEditable, onUpdate, onDelete }: TableRowProps
 
 // Inline Number Input Component
 interface InlineNumberInputProps {
-  value: string;
+  value: string | null;
   onChangeValue: (value: string) => void;
   editable: boolean;
 }
 
 function InlineNumberInput({ value, onChangeValue, editable }: InlineNumberInputProps) {
   const inputRef = useRef<TextInput>(null);
+  const [isFocused, setIsFocused] = useState(false);
+  const [localValue, setLocalValue] = useState('');
   
-  // Force re-render when value prop changes
-  const [key, setKey] = React.useState(0);
-  const [localValue, setLocalValue] = React.useState('');
+  // Normalize prop value (handle null, undefined, and string)
+  const normalizedValue = value ?? '';
   
-  // Initialize and update when value changes
-  React.useEffect(() => {
-    const newValue = value || '';
-    setLocalValue(newValue);
-    // Force re-render with new key
-    setKey(prev => prev + 1);
-  }, [value]);
+  // Sync local state with prop value when:
+  // 1. Not focused (don't overwrite user input)
+  // 2. Prop value changes
+  useEffect(() => {
+    if (!isFocused) {
+      setLocalValue(normalizedValue);
+    }
+  }, [normalizedValue, isFocused]);
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    // Clear the dash when focusing for easier editing
+    if (localValue === '-' || localValue === '') {
+      setLocalValue('');
+    }
+  };
 
   const handleBlur = () => {
-    const currentValue = localValue || '';
-    const cleaned = currentValue.toString().trim();
+    setIsFocused(false);
+    const cleaned = localValue.toString().trim();
     
-    if (cleaned === '') {
-      setLocalValue('-');
+    if (cleaned === '' || cleaned === '-') {
+      setLocalValue('');
       onChangeValue('');
     } else {
       const numValue = cleaned.replace(/[^0-9.]/g, '');
-      setLocalValue(numValue || '-');
+      setLocalValue(numValue);
       onChangeValue(numValue);
     }
   };
 
-  const displayValue = localValue === '' ? '-' : (localValue || '-');
+  // Display value: show dash for empty when not focused
+  const displayValue = isFocused ? localValue : (localValue === '' ? '-' : localValue);
   
   if (!editable) {
-    return <Body style={styles.numericValue}>{displayValue}</Body>;
+    return <Body style={styles.numericValue}>{normalizedValue === '' ? '-' : normalizedValue}</Body>;
   }
 
   return (
     <TextInput
-      key={key}
       ref={inputRef}
       style={styles.inlineInput}
-      value={localValue}
-      onChangeText={(text) => setLocalValue(text)}
+      value={displayValue}
+      onChangeText={setLocalValue}
+      onFocus={handleFocus}
       onBlur={handleBlur}
-      keyboardType="default"
+      keyboardType="numeric"
       selectTextOnFocus
       placeholder="-"
       placeholderTextColor={Colors.textMuted}
@@ -656,17 +669,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    paddingVertical: Spacing.md,
     backgroundColor: Colors.surface,
+    ...Shadows.small,
   },
   backButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -Spacing.sm,
+    marginLeft: -Spacing.xs,
   },
   headerInfo: {
     flex: 1,
@@ -675,7 +687,7 @@ const styles = StyleSheet.create({
   statusBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 4,
+    borderRadius: 6,
   },
   content: {
     padding: Spacing.md,
@@ -687,11 +699,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.sm,
     paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.default,
-    borderWidth: 1,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 2,
     borderColor: Colors.primary,
     borderStyle: 'dashed',
     marginBottom: Spacing.md,
+    backgroundColor: Colors.primary + '05',
   },
   emptyCard: {
     marginBottom: Spacing.md,
@@ -708,28 +721,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tableContainer: {
-    borderRadius: BorderRadius.default,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    borderRadius: BorderRadius.lg,
     backgroundColor: Colors.surface,
     overflow: 'hidden',
     marginBottom: Spacing.md,
+    ...Shadows.small,
   },
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: Colors.primary,
     paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.primary,
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.borderLight,
     paddingVertical: Spacing.sm,
   },
   tableRowAlt: {
-    // Removed alternating background color
+    backgroundColor: Colors.tableRowAlt,
   },
   tableCell: {
     paddingHorizontal: Spacing.xs,
@@ -737,8 +747,9 @@ const styles = StyleSheet.create({
   },
   headerText: {
     fontSize: 10,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
+    color: Colors.primaryForeground,
   },
   itemCell: {
     flex: 2,
@@ -750,13 +761,15 @@ const styles = StyleSheet.create({
   },
   itemName: {
     fontSize: FontSizes.sm,
-    fontWeight: '500',
+    fontWeight: '600',
     lineHeight: 18,
+    color: Colors.textPrimary,
   },
   numericValue: {
     fontSize: FontSizes.sm,
     fontFamily: FontFamilies.regular,
     textAlign: 'center',
+    color: Colors.textPrimary,
   },
   inlineInput: {
     fontSize: FontSizes.sm,
@@ -766,6 +779,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 6,
     minWidth: 40,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 4,
   },
   rowFooter: {
     flexDirection: 'row',
@@ -774,7 +789,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.borderLight,
   },
   remarksContainer: {
     flex: 1,
@@ -790,7 +805,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   totalValue: {
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.primary,
   },
   grandTotalRow: {
@@ -799,15 +814,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    borderTopWidth: 2,
-    borderTopColor: Colors.primary,
+    backgroundColor: Colors.primary + '08',
   },
   grandTotalLabel: {
     fontWeight: '600',
     color: Colors.textSecondary,
+    fontSize: 13,
   },
   grandTotalValue: {
     color: Colors.primary,
+    fontWeight: '700',
   },
   actions: {
     gap: Spacing.sm,
@@ -825,7 +841,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
+    borderBottomColor: Colors.borderLight,
     backgroundColor: Colors.surface,
   },
   pickerContent: {
@@ -849,7 +865,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.default,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
@@ -872,7 +888,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxSelected: {
-    backgroundColor: Colors.accent,
-    borderColor: Colors.accent,
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
   },
 });
