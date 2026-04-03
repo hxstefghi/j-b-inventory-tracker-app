@@ -24,7 +24,7 @@ import { useAuth } from '@/hooks/use-auth';
 import { Title, Subtitle, Body, Caption, Label } from '@/components/text';
 import { Button, Input, Card, CardContent } from '@/components/ui';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/colors';
+import { Colors, Shadows } from '@/constants/colors';
 import { Spacing, BorderRadius } from '@/constants/spacing';
 import { formatDateLong, getCurrentShift } from '@/utils/format';
 import { createSession, getOpenSession } from '@/lib/db';
@@ -107,11 +107,11 @@ export default function NewSessionScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <IconSymbol name="chevronLeft" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
-        <Title>New Session</Title>
+        <Title style={styles.headerTitle}>New Session</Title>
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Date Picker */}
         <View style={styles.fieldContainer}>
           <Label color="textSecondary" style={styles.fieldLabel}>Date</Label>
@@ -120,9 +120,11 @@ export default function NewSessionScreen() {
             onPress={() => setShowDatePicker(true)}
             activeOpacity={0.7}
           >
-            <IconSymbol name="calendar" size={20} color={Colors.primary} />
+            <View style={styles.dateIconContainer}>
+              <IconSymbol name="calendar" size={18} color={Colors.primary} />
+            </View>
             <Body style={styles.dateText}>{formatDateLong(date)}</Body>
-            <IconSymbol name="chevronDown" size={20} color={Colors.textMuted} />
+            <IconSymbol name="chevronDown" size={18} color={Colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -158,20 +160,26 @@ export default function NewSessionScreen() {
                 shift === 'AM' && styles.shiftOptionSelected,
               ]}
               onPress={() => setShift('AM')}
+              activeOpacity={0.7}
             >
-              <IconSymbol
-                name="accessTime"
-                size={20}
-                color={shift === 'AM' ? Colors.primary : Colors.textMuted}
-              />
+              <View style={[
+                styles.shiftIconContainer,
+                { backgroundColor: shift === 'AM' ? Colors.primary + '15' : Colors.borderLight }
+              ]}>
+                <IconSymbol
+                  name="accessTime"
+                  size={18}
+                  color={shift === 'AM' ? Colors.primary : Colors.textMuted}
+                />
+              </View>
               <View>
-                <Body
-                  color={shift === 'AM' ? 'primary' : 'textSecondary'}
-                  style={styles.shiftLabel}
-                >
+                <Body style={[
+                  styles.shiftLabel,
+                  { color: shift === 'AM' ? Colors.primary : Colors.textSecondary }
+                ]}>
                   AM
                 </Body>
-                <Caption color="textMuted">Morning shift</Caption>
+                <Caption color="textMuted">Morning</Caption>
               </View>
             </TouchableOpacity>
             <TouchableOpacity
@@ -180,20 +188,26 @@ export default function NewSessionScreen() {
                 shift === 'PM' && styles.shiftOptionSelected,
               ]}
               onPress={() => setShift('PM')}
+              activeOpacity={0.7}
             >
-              <IconSymbol
-                name="accessTime"
-                size={20}
-                color={shift === 'PM' ? Colors.primary : Colors.textMuted}
-              />
+              <View style={[
+                styles.shiftIconContainer,
+                { backgroundColor: shift === 'PM' ? Colors.primary + '15' : Colors.borderLight }
+              ]}>
+                <IconSymbol
+                  name="accessTime"
+                  size={18}
+                  color={shift === 'PM' ? Colors.primary : Colors.textMuted}
+                />
+              </View>
               <View>
-                <Body
-                  color={shift === 'PM' ? 'primary' : 'textSecondary'}
-                  style={styles.shiftLabel}
-                >
+                <Body style={[
+                  styles.shiftLabel,
+                  { color: shift === 'PM' ? Colors.primary : Colors.textSecondary }
+                ]}>
                   PM
                 </Body>
-                <Caption color="textMuted">Afternoon shift</Caption>
+                <Caption color="textMuted">Afternoon</Caption>
               </View>
             </TouchableOpacity>
           </View>
@@ -210,23 +224,21 @@ export default function NewSessionScreen() {
         />
 
         {/* Preview Card */}
-        <Card variant="outlined" style={styles.previewCard}>
-          <CardContent>
-            <Caption color="textMuted" style={styles.previewLabel}>SESSION PREVIEW</Caption>
-            <View style={styles.previewRow}>
-              <Body color="textSecondary">Date:</Body>
-              <Body style={styles.previewValue}>{formatDateLong(date)}</Body>
-            </View>
-            <View style={styles.previewRow}>
-              <Body color="textSecondary">Shift:</Body>
-              <Body style={styles.previewValue}>{shift}</Body>
-            </View>
-            <View style={styles.previewRow}>
-              <Body color="textSecondary">Cashier:</Body>
-              <Body style={styles.previewValue}>{cashierName || '-'}</Body>
-            </View>
-          </CardContent>
-        </Card>
+        <View style={styles.previewCard}>
+          <Caption color="textMuted" style={styles.previewLabel}>SESSION PREVIEW</Caption>
+          <View style={styles.previewRow}>
+            <Body color="textMuted">Date</Body>
+            <Body style={styles.previewValue}>{formatDateLong(date)}</Body>
+          </View>
+          <View style={styles.previewRow}>
+            <Body color="textMuted">Shift</Body>
+            <Body style={styles.previewValue}>{shift}</Body>
+          </View>
+          <View style={styles.previewRow}>
+            <Body color="textMuted">Cashier</Body>
+            <Body style={styles.previewValue}>{cashierName || '-'}</Body>
+          </View>
+        </View>
 
         {/* Create Button */}
         <Button
@@ -254,28 +266,32 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
     backgroundColor: Colors.surface,
+    ...Shadows.small,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
   },
   backButton: {
     width: 40,
     height: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -Spacing.sm,
+    marginLeft: -Spacing.xs,
   },
   placeholder: {
     width: 40,
   },
   content: {
-    padding: Spacing.md,
+    padding: Spacing.lg,
   },
   fieldContainer: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   fieldLabel: {
-    marginBottom: 6,
+    marginBottom: 8,
+    fontWeight: '500',
   },
   dateButton: {
     flexDirection: 'row',
@@ -283,18 +299,28 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.default,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
+  dateIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   dateText: {
     flex: 1,
+    fontWeight: '500',
   },
   datePickerContainer: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.default,
+    borderRadius: BorderRadius.lg,
     marginBottom: Spacing.md,
+    ...Shadows.small,
   },
   datePickerDone: {
     alignSelf: 'flex-end',
@@ -312,35 +338,47 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.default,
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
     borderColor: Colors.border,
     backgroundColor: Colors.surface,
   },
   shiftOptionSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primary + '10',
+    backgroundColor: Colors.primary + '05',
+  },
+  shiftIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   shiftLabel: {
     fontWeight: '600',
   },
   previewCard: {
-    backgroundColor: Colors.tableHeader,
-    marginTop: Spacing.md,
-    marginBottom: Spacing.lg,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    marginTop: Spacing.sm,
+    marginBottom: Spacing.xl,
+    ...Shadows.small,
   },
   previewLabel: {
     fontSize: 11,
+    fontWeight: '600',
     letterSpacing: 0.5,
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
   },
   previewRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: Spacing.xs,
+    paddingVertical: Spacing.xs,
   },
   previewValue: {
-    fontWeight: '500',
+    fontWeight: '600',
+    color: Colors.textPrimary,
   },
   createButton: {
     marginTop: Spacing.sm,

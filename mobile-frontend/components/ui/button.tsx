@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Text } from '@/components/text';
-import { Colors } from '@/constants/colors';
+import { Colors, Shadows } from '@/constants/colors';
 import { Spacing, Sizing, BorderRadius } from '@/constants/spacing';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
@@ -66,6 +66,7 @@ export function Button({
         fullWidth && styles.fullWidth,
         pressed && !isDisabled && styles.pressed,
         isDisabled && styles.disabled,
+        variant === 'primary' && !isDisabled && Shadows.small,
         style,
       ]}
       accessibilityRole="button"
@@ -101,7 +102,7 @@ export function Button({
 function getTextColor(variant: ButtonVariant): string {
   switch (variant) {
     case 'primary':
-      return Colors.accentForeground;
+      return Colors.primaryForeground;
     case 'secondary':
       return Colors.primary;
     case 'ghost':
@@ -118,17 +119,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: BorderRadius.default,
+    borderRadius: BorderRadius.lg,
     paddingHorizontal: Spacing.lg,
   },
 
   // Variants
   primary: {
-    backgroundColor: Colors.accent,
+    backgroundColor: Colors.primary,
   },
   secondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 2,
+    backgroundColor: Colors.surface,
+    borderWidth: 1.5,
     borderColor: Colors.primary,
   },
   ghost: {
@@ -154,7 +155,8 @@ const styles = StyleSheet.create({
 
   // States
   pressed: {
-    opacity: 0.7,
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   disabled: {
     opacity: 0.4,
@@ -166,9 +168,10 @@ const styles = StyleSheet.create({
   // Text styles
   text: {
     textAlign: 'center',
+    fontWeight: '600',
   },
   primaryText: {
-    color: Colors.accentForeground,
+    color: Colors.primaryForeground,
   },
   secondaryText: {
     color: Colors.primary,

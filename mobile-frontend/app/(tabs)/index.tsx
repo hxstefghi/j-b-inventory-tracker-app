@@ -1,20 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/use-auth';
 import { Title, Subtitle, Body, Caption } from '@/components/text';
-import { Card, CardContent } from '@/components/ui';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/colors';
-import { Spacing } from '@/constants/spacing';
-import { formatCurrency, formatDate, formatTime } from '@/utils/format';
-import { getSessionsByUser, getItemsBySession } from '@/lib/db';
-import type { InventorySession } from '@/lib/db/schema';
+import { Colors, Shadows } from '@/constants/colors';
+import { Spacing, BorderRadius } from '@/constants/spacing';
+import { formatDate } from '@/utils/format';
+import { getSessionsByUser, getProfile } from '@/lib/db';
+import type { InventorySession, Profile } from '@/lib/db/schema';
 
 export default function HomeScreen() {
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
   const [recentSessions, setRecentSessions] = useState<InventorySession[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -22,8 +22,12 @@ export default function HomeScreen() {
     if (!session?.user) return;
     
     try {
-      const sessions = await getSessionsByUser(session.user.id, 5);
+      const [sessions, profileData] = await Promise.all([
+        getSessionsByUser(session.user.id, 5),
+        getProfile(session.user.id),
+      ]);
       setRecentSessions(sessions);
+      setProfile(profileData);
     } catch (error) {
       console.error('Error loading sessions:', error);
     } finally {
@@ -41,13 +45,11 @@ export default function HomeScreen() {
     loadData();
   };
 
-  const getStatusColor = (status: string) => {
-    return status === 'open' ? Colors.success : Colors.textMuted;
-  };
+  const openCount = recentSessions.filter(s => s.status === 'open').length;
+  const closedCount = recentSessions.filter(s => s.status === 'closed').length;
 
-  const getStatusLabel = (status: string) => {
-    return status === 'open' ? 'Active' : 'Closed';
-  };
+  // Extract first name from full name
+  const firstName = profile?.full_name?.split(' ')[0] || '';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -55,126 +57,129 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor={Colors.primary} 
+          />
         }
       >
-        {/* Header */}
+        {/* Header with Profile */}
         <View style={styles.header}>
-          <View>
-            <Title style={styles.greeting}>Welcome back</Title>
-            <Caption color="textMuted">
-              {formatDate(new Date())} • {session?.user?.email}
-            </Caption>
+          <View style={styles.headerLeft}>
+            <Title style={styles.greeting}>
+              {firstName ? `Hi, ${firstName}` : 'JB Inventory'}
+            </Title>
+            <Caption color="textMuted">{formatDate(new Date())}</Caption>
           </View>
+          <TouchableOpacity 
+            style={styles.profileButton}
+            onPress={() => router.push('/(tabs)/profile')}
+            activeOpacity={0.7}
+          >
+            <IconSymbol name="account" size={24} color={Colors.textSecondary} />
+          </TouchableOpacity>
         </View>
 
-        {/* Quick Stats */}
-        <View style={styles.statsRow}>
-          <Card variant="outlined" style={styles.statCard}>
-            <CardContent style={styles.statContent}>
+        {/* Stats Cards */}
+        <View style={styles.statsContainer}>
+          <View style={[styles.statCard, styles.statCardPrimary]}>
+            <View style={styles.statIcon}>
               <IconSymbol name="inventory" size={20} color={Colors.primary} />
-              <Subtitle style={styles.statValue}>{recentSessions.length}</Subtitle>
-              <Caption color="textMuted">Sessions</Caption>
-            </CardContent>
-          </Card>
-          <Card variant="outlined" style={styles.statCard}>
-            <CardContent style={styles.statContent}>
+            </View>
+            <Body style={styles.statLabel}>Sessions</Body>
+            <Title style={styles.statValue}>{recentSessions.length}</Title>
+          </View>
+          
+          <View style={styles.statCard}>
+            <View style={[styles.statIcon, { backgroundColor: Colors.successLight }]}>
               <IconSymbol name="check" size={20} color={Colors.success} />
-              <Subtitle style={styles.statValue}>
-                {recentSessions.filter(s => s.status === 'closed').length}
-              </Subtitle>
-              <Caption color="textMuted">Completed</Caption>
-            </CardContent>
-          </Card>
+            </View>
+            <Body style={styles.statLabel}>Open</Body>
+            <Subtitle style={styles.statValueSmall}>{openCount}</Subtitle>
+          </View>
+          
+          <View style={styles.statCard}>
+            <View style={[styles.statIcon, { backgroundColor: Colors.borderLight }]}>
+              <IconSymbol name="checkAll" size={20} color={Colors.textMuted} />
+            </View>
+            <Body style={styles.statLabel}>Closed</Body>
+            <Subtitle style={styles.statValueSmall}>{closedCount}</Subtitle>
+          </View>
         </View>
 
-        {/* Quick Action */}
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => router.push('/session/new')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.actionContent}>
-            <IconSymbol name="add" size={24} color={Colors.accentForeground} />
-            <View style={styles.actionText}>
-              <Subtitle style={styles.actionTitle}>New Session</Subtitle>
-              <Caption color="accentForeground">Start tracking inventory</Caption>
-            </View>
-          </View>
-          <IconSymbol name="chevronRight" size={20} color={Colors.accentForeground} />
-        </TouchableOpacity>
-
-        {/* Recent Sessions */}
+        {/* Recent Activity Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Subtitle>Recent Activity</Subtitle>
+            <Subtitle style={styles.sectionTitle}>Recent Activity</Subtitle>
             <TouchableOpacity onPress={() => router.push('/(tabs)/explore')}>
-              <Caption color="primary">See all</Caption>
+              <Body color="primary" style={styles.viewAll}>View All</Body>
             </TouchableOpacity>
           </View>
 
           {loading ? (
-            <Card variant="outlined">
-              <CardContent>
-                <Body color="textMuted">Loading...</Body>
-              </CardContent>
-            </Card>
+            <View style={styles.emptyContainer}>
+              <Body color="textMuted">Loading...</Body>
+            </View>
           ) : recentSessions.length === 0 ? (
-            <Card variant="outlined">
-              <CardContent style={styles.emptyState}>
-                <IconSymbol name="folder" size={32} color={Colors.textMuted} />
-                <Body color="textMuted" style={styles.emptyText}>
-                  No sessions yet
-                </Body>
-                <Caption color="textMuted">Start your first inventory session</Caption>
-              </CardContent>
-            </Card>
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIcon}>
+                <IconSymbol name="folder" size={40} color={Colors.textMuted} />
+              </View>
+              <Subtitle color="textMuted" style={styles.emptyTitle}>No sessions yet</Subtitle>
+              <Body color="textMuted" style={styles.emptySubtitle}>
+                Tap the + button to start tracking
+              </Body>
+            </View>
           ) : (
-            recentSessions.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                onPress={() => router.push(`/session/${item.id}` as any)}
-                activeOpacity={0.7}
-              >
-                <Card variant="outlined" style={styles.sessionCard}>
-                  <CardContent style={styles.sessionContent}>
-                    <View style={styles.sessionInfo}>
-                      <View style={styles.sessionHeader}>
-                        <Body style={styles.sessionDate}>
-                          {formatDate(new Date(item.session_date))}
-                        </Body>
-                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status || 'open') + '20' }]}>
-                          <Caption style={{ color: getStatusColor(item.status || 'open'), fontWeight: '600' }}>
-                            {getStatusLabel(item.status || 'open')}
-                          </Caption>
-                        </View>
-                      </View>
+            <View style={styles.sessionsList}>
+              {recentSessions.map((item, index) => (
+                <TouchableOpacity
+                  key={item.id}
+                  onPress={() => router.push(`/session/${item.id}` as any)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.sessionCard,
+                    index === recentSessions.length - 1 && { borderBottomWidth: 0 }
+                  ]}
+                >
+                  <View style={styles.sessionLeft}>
+                    <View style={[
+                      styles.sessionIndicator,
+                      { backgroundColor: item.status === 'open' ? Colors.success : Colors.textMuted }
+                    ]} />
+                    <View>
+                      <Body style={styles.sessionDate}>
+                        {formatDate(new Date(item.session_date))}
+                      </Body>
                       <Caption color="textMuted">
-                        {item.shift} • {item.cashier_name}
+                        {item.shift} Shift • {item.cashier_name}
                       </Caption>
                     </View>
-                    <IconSymbol name="chevronRight" size={20} color={Colors.textMuted} />
-                  </CardContent>
-                </Card>
-              </TouchableOpacity>
-            ))
+                  </View>
+                  <View style={styles.sessionRight}>
+                    <View style={[
+                      styles.statusPill,
+                      { backgroundColor: item.status === 'open' ? Colors.successLight : Colors.borderLight }
+                    ]}>
+                      <Caption style={{ 
+                        color: item.status === 'open' ? Colors.success : Colors.textMuted,
+                        fontWeight: '600',
+                        fontSize: 11,
+                      }}>
+                        {item.status === 'open' ? 'Active' : 'Closed'}
+                      </Caption>
+                    </View>
+                    <IconSymbol name="chevronRight" size={16} color={Colors.textMuted} />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
           )}
         </View>
 
-        {/* Tips Section */}
-        <Card variant="outlined" style={styles.tipsCard}>
-          <CardContent>
-            <View style={styles.tipsHeader}>
-              <IconSymbol name="inventory" size={18} color={Colors.primary} />
-              <Caption color="textMuted">Quick Tips</Caption>
-            </View>
-            <Body style={styles.tipsText}>
-              Tap on a session to view details. Swipe to edit or delete items.
-            </Body>
-          </CardContent>
-        </Card>
-
-        <View style={{ height: Spacing.xl }} />
+        {/* Bottom spacing for tab bar */}
+        <View style={{ height: 120 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -186,108 +191,147 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   content: {
-    padding: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
   header: {
-    marginBottom: Spacing.lg,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.xl,
+  },
+  headerLeft: {
+    flex: 1,
   },
   greeting: {
     fontSize: 28,
     fontWeight: '700',
     color: Colors.textPrimary,
+    marginBottom: 2,
   },
-  statsRow: {
+  profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadows.small,
+  },
+  statsContainer: {
     flexDirection: 'row',
     gap: Spacing.sm,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.xl,
   },
   statCard: {
     flex: 1,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    ...Shadows.small,
   },
-  statContent: {
+  statCardPrimary: {
+    flex: 1.5,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: Colors.primary + '15',
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
+  },
+  statLabel: {
+    color: Colors.textMuted,
+    fontSize: 12,
+    marginBottom: 2,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
-    marginTop: Spacing.xs,
+    color: Colors.textPrimary,
   },
-  actionButton: {
-    backgroundColor: Colors.accent,
-    borderRadius: 12,
-    padding: Spacing.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
-  },
-  actionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  actionText: {
-    gap: 2,
-  },
-  actionTitle: {
-    color: Colors.accentForeground,
-    fontWeight: '600',
+  statValueSmall: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.textPrimary,
   },
   section: {
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  sectionTitle: {
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  viewAll: {
+    fontWeight: '500',
+  },
+  sessionsList: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    ...Shadows.small,
   },
   sessionCard: {
-    marginBottom: Spacing.sm,
-  },
-  sessionContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    padding: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
   },
-  sessionInfo: {
-    flex: 1,
-  },
-  sessionHeader: {
+  sessionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
-    marginBottom: 2,
+    flex: 1,
+  },
+  sessionIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   sessionDate: {
     fontWeight: '600',
+    color: Colors.textPrimary,
+    marginBottom: 2,
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: Spacing.lg,
-    gap: Spacing.xs,
-  },
-  emptyText: {
-    marginTop: Spacing.sm,
-  },
-  tipsCard: {
-    backgroundColor: Colors.primary + '08',
-    borderColor: Colors.primary + '20',
-  },
-  tipsHeader: {
+  sessionRight: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+  },
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  emptyContainer: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.xl,
+    alignItems: 'center',
+    ...Shadows.small,
+  },
+  emptyIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
+  emptyTitle: {
     marginBottom: Spacing.xs,
   },
-  tipsText: {
-    color: Colors.textSecondary,
-    lineHeight: 20,
+  emptySubtitle: {
+    textAlign: 'center',
   },
 });

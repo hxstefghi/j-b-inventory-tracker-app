@@ -1,15 +1,14 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, StyleSheet, SectionList, TouchableOpacity, RefreshControl, Text } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, SectionList, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuth } from '@/hooks/use-auth';
 import { Title, Body, Caption, Subtitle } from '@/components/text';
-import { Card, CardContent } from '@/components/ui';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/colors';
-import { Spacing } from '@/constants/spacing';
-import { formatCurrency, formatDate, getCurrentShift } from '@/utils/format';
-import { getSessionsByUser, getItemsBySession } from '@/lib/db';
+import { Colors, Shadows } from '@/constants/colors';
+import { Spacing, BorderRadius } from '@/constants/spacing';
+import { formatDate } from '@/utils/format';
+import { getSessionsByUser } from '@/lib/db';
 import type { InventorySession } from '@/lib/db/schema';
 
 interface SessionSection {
@@ -17,36 +16,23 @@ interface SessionSection {
   data: InventorySession[];
 }
 
+type FilterType = 'all' | 'open' | 'closed';
+
 export default function HistoryScreen() {
   const { session } = useAuth();
+  const [allSessions, setAllSessions] = useState<InventorySession[]>([]);
   const [sections, setSections] = useState<SessionSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
 
   const loadData = async () => {
     if (!session?.user) return;
     
     try {
-      const allSessions = await getSessionsByUser(session.user.id, 50);
-      
-      // Group by date
-      const grouped = allSessions.reduce((acc, item) => {
-        const dateKey = formatDate(new Date(item.session_date));
-        if (!acc[dateKey]) {
-          acc[dateKey] = [];
-        }
-        acc[dateKey].push(item);
-        return acc;
-      }, {} as Record<string, InventorySession[]>);
-
-      // Convert to sections
-      const sectionData: SessionSection[] = Object.entries(grouped).map(([title, data]) => ({
-        title,
-        data,
-      }));
-
-      setSections(sectionData);
+      const sessions = await getSessionsByUser(session.user.id, 100);
+      setAllSessions(sessions);
+      groupSessions(sessions, activeFilter);
     } catch (error) {
       console.error('Error loading sessions:', error);
     } finally {
@@ -55,80 +41,155 @@ export default function HistoryScreen() {
     }
   };
 
+  const groupSessions = (sessions: InventorySession[], filter: FilterType) => {
+    // Apply filter
+    let filtered = sessions;
+    if (filter === 'open') {
+      filtered = sessions.filter(s => s.status === 'open');
+    } else if (filter === 'closed') {
+      filtered = sessions.filter(s => s.status === 'closed');
+    }
+
+    // Group by date
+    const grouped = filtered.reduce((acc, item) => {
+      const dateKey = formatDate(new Date(item.session_date));
+      if (!acc[dateKey]) {
+        acc[dateKey] = [];
+      }
+      acc[dateKey].push(item);
+      return acc;
+    }, {} as Record<string, InventorySession[]>);
+
+    // Convert to sections
+    const sectionData: SessionSection[] = Object.entries(grouped).map(([title, data]) => ({
+      title,
+      data,
+    }));
+
+    setSections(sectionData);
+  };
+
   useEffect(() => {
     loadData();
   }, [session]);
+
+  useEffect(() => {
+    groupSessions(allSessions, activeFilter);
+  }, [activeFilter]);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadData();
   };
 
-  const getStatusColor = (status: string) => {
-    return status === 'open' ? Colors.success : Colors.textMuted;
+  const handleFilterChange = (filter: FilterType) => {
+    setActiveFilter(filter);
   };
 
   const renderSectionHeader = ({ section }: { section: SessionSection }) => (
     <View style={styles.sectionHeader}>
-      <Caption color="textMuted" style={styles.sectionTitle}>
-        {section.title}
-      </Caption>
+      <Caption style={styles.sectionTitle}>{section.title}</Caption>
     </View>
   );
 
-  const renderItem = ({ item }: { item: InventorySession }) => (
-    <TouchableOpacity
-      onPress={() => router.push(`/session/${item.id}` as any)}
-      activeOpacity={0.7}
-    >
-      <Card variant="outlined" style={styles.sessionCard}>
-        <CardContent style={styles.sessionContent}>
-          <View style={styles.sessionLeft}>
-            <View style={styles.sessionHeader}>
-              <Subtitle style={styles.shiftLabel}>{item.shift}</Subtitle>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(item.status || 'open') }]} />
-            </View>
-            <Caption color="textMuted">{item.cashier_name}</Caption>
+  const renderItem = ({ item, index, section }: { item: InventorySession; index: number; section: SessionSection }) => {
+    const isFirst = index === 0;
+    const isLast = index === section.data.length - 1;
+
+    return (
+      <TouchableOpacity
+        onPress={() => router.push(`/session/${item.id}` as any)}
+        activeOpacity={0.7}
+        style={[
+          styles.sessionCard,
+          isFirst && styles.sessionCardFirst,
+          isLast && styles.sessionCardLast,
+          !isLast && styles.sessionCardBorder,
+        ]}
+      >
+        <View style={styles.sessionLeft}>
+          <View style={[
+            styles.shiftBadge,
+            { backgroundColor: item.shift === 'AM' ? Colors.primary + '15' : Colors.secondary + '10' }
+          ]}>
+            <Caption style={[
+              styles.shiftText,
+              { color: item.shift === 'AM' ? Colors.primary : Colors.secondary }
+            ]}>
+              {item.shift}
+            </Caption>
           </View>
-          <View style={styles.sessionRight}>
-            <Caption color="textMuted">{item.table_number || ''}</Caption>
-            <IconSymbol name="chevronRight" size={18} color={Colors.textMuted} />
-          </View>
-        </CardContent>
-      </Card>
-    </TouchableOpacity>
-  );
+        </View>
+        
+        <View style={styles.sessionCenter}>
+          <Body style={styles.cashierName}>{item.cashier_name}</Body>
+          <Caption color="textMuted">
+            {item.status === 'open' ? 'In Progress' : 'Completed'}
+          </Caption>
+        </View>
+
+        <View style={styles.sessionRight}>
+          <View style={[
+            styles.statusIndicator,
+            { backgroundColor: item.status === 'open' ? Colors.success : Colors.textLight }
+          ]} />
+          <IconSymbol name="chevronRight" size={18} color={Colors.textMuted} />
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <IconSymbol name="folder" size={48} color={Colors.textMuted} />
-      <Body color="textMuted" style={styles.emptyTitle}>No sessions yet</Body>
-      <Caption color="textMuted" style={styles.emptyText}>
-        Start tracking inventory from the Home screen
-      </Caption>
+      <View style={styles.emptyIcon}>
+        <IconSymbol name="history" size={40} color={Colors.textMuted} />
+      </View>
+      <Subtitle color="textMuted" style={styles.emptyTitle}>No sessions found</Subtitle>
+      <Body color="textMuted" style={styles.emptyText}>
+        {activeFilter !== 'all' 
+          ? `No ${activeFilter} sessions to show`
+          : 'Start tracking inventory with the + button'
+        }
+      </Body>
     </View>
   );
 
+  const FilterButton = ({ filter, label }: { filter: FilterType; label: string }) => {
+    const isActive = activeFilter === filter;
+    return (
+      <TouchableOpacity
+        style={[styles.filterTab, isActive && styles.filterTabActive]}
+        onPress={() => handleFilterChange(filter)}
+        activeOpacity={0.7}
+      >
+        <Body style={[
+          styles.filterText,
+          isActive && styles.filterTextActive
+        ]}>
+          {label}
+        </Body>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <Title>History</Title>
+        <Title style={styles.headerTitle}>History</Title>
         <Caption color="textMuted">All inventory sessions</Caption>
       </View>
 
       {/* Filter Tabs */}
-      <View style={styles.filterRow}>
-        <TouchableOpacity style={styles.filterTab} activeOpacity={0.7}>
-          <Caption style={{ color: Colors.textPrimary }}>All</Caption>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterTab, styles.filterTabInactive]} activeOpacity={0.7}>
-          <Caption color="textMuted">Open</Caption>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterTab, styles.filterTabInactive]} activeOpacity={0.7}>
-          <Caption color="textMuted">Closed</Caption>
-        </TouchableOpacity>
+      <View style={styles.filterContainer}>
+        <View style={styles.filterRow}>
+          <FilterButton filter="all" label="All" />
+          <FilterButton filter="open" label="Open" />
+          <FilterButton filter="closed" label="Closed" />
+        </View>
       </View>
 
+      {/* Sessions List */}
       <SectionList
         sections={sections}
         keyExtractor={(item) => item.id}
@@ -136,10 +197,14 @@ export default function HistoryScreen() {
         renderSectionHeader={renderSectionHeader}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        ListEmptyComponent={renderEmpty}
+        ListEmptyComponent={!loading ? renderEmpty : null}
         stickySectionHeadersEnabled={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor={Colors.primary} 
+          />
         }
       />
     </SafeAreaView>
@@ -152,31 +217,50 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
   },
   header: {
-    paddingHorizontal: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.md,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  filterContainer: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
   filterRow: {
     flexDirection: 'row',
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.md,
-    gap: Spacing.sm,
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: 4,
+    ...Shadows.small,
   },
   filterTab: {
-    paddingHorizontal: Spacing.md,
+    flex: 1,
     paddingVertical: Spacing.sm,
-    borderRadius: 20,
-    backgroundColor: Colors.primary + '15',
+    alignItems: 'center',
+    borderRadius: BorderRadius.md,
   },
-  filterTabInactive: {
-    backgroundColor: Colors.surface,
+  filterTabActive: {
+    backgroundColor: Colors.primary,
+  },
+  filterText: {
+    color: Colors.textMuted,
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  filterTextActive: {
+    color: Colors.primaryForeground,
   },
   listContent: {
-    paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: 120,
   },
   sectionHeader: {
-    paddingVertical: Spacing.sm,
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.sm,
     backgroundColor: Colors.background,
   },
   sectionTitle: {
@@ -184,49 +268,80 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 0.5,
+    color: Colors.textMuted,
   },
   sessionCard: {
-    marginBottom: Spacing.sm,
-  },
-  sessionContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+  },
+  sessionCardFirst: {
+    borderTopLeftRadius: BorderRadius.lg,
+    borderTopRightRadius: BorderRadius.lg,
+  },
+  sessionCardLast: {
+    borderBottomLeftRadius: BorderRadius.lg,
+    borderBottomRightRadius: BorderRadius.lg,
+    marginBottom: Spacing.xs,
+    ...Shadows.small,
+  },
+  sessionCardBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
   },
   sessionLeft: {
+    marginRight: Spacing.md,
+  },
+  shiftBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shiftText: {
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  sessionCenter: {
     flex: 1,
   },
-  sessionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: 2,
-  },
-  shiftLabel: {
+  cashierName: {
     fontWeight: '600',
-    fontSize: 16,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    color: Colors.textPrimary,
+    marginBottom: 2,
   },
   sessionRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.sm,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   emptyContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: Spacing['3xl'],
   },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.md,
+  },
   emptyTitle: {
-    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
   },
   emptyText: {
-    marginTop: Spacing.xs,
     textAlign: 'center',
+    maxWidth: 240,
   },
 });
