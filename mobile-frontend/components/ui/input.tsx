@@ -14,7 +14,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { Text } from '@/components/text';
-import { Colors } from '@/constants/colors';
+import { Colors, Shadows } from '@/constants/colors';
 import { Spacing, Sizing, BorderRadius } from '@/constants/spacing';
 import { FontFamilies, FontSizes } from '@/constants/typography';
 
@@ -79,13 +79,14 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   label: {
-    marginBottom: 6,
+    marginBottom: 8,
+    fontWeight: '500',
   },
   input: {
     height: Sizing.inputHeight,
     borderWidth: 1,
     borderColor: Colors.border,
-    borderRadius: BorderRadius.default,
+    borderRadius: BorderRadius.lg,
     paddingHorizontal: Spacing.md,
     fontSize: FontSizes.base,
     fontFamily: FontFamilies.regular,
@@ -95,15 +96,17 @@ const styles = StyleSheet.create({
   inputFocused: {
     borderColor: Colors.primary,
     borderWidth: 2,
+    ...Shadows.small,
   },
   inputError: {
     borderColor: Colors.error,
   },
   errorText: {
-    marginTop: 4,
+    marginTop: 6,
+    color: Colors.error,
   },
   helperText: {
-    marginTop: 4,
+    marginTop: 6,
   },
 });
 

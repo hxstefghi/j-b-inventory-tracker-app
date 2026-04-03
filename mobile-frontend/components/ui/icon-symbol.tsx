@@ -18,12 +18,14 @@ const ICONS = {
   chevronLeft: 'chevron-left' as IconName,
   chevronDown: 'keyboard-arrow-down' as IconName,
   check: 'check' as IconName,
+  checkAll: 'done-all' as IconName,
   edit: 'edit' as IconName,
   delete: 'delete' as IconName,
   search: 'search' as IconName,
   moreVert: 'more-vert' as IconName,
   calendar: 'calendar-today' as IconName,
   person: 'person' as IconName,
+  account: 'account-circle' as IconName,
   attachMoney: 'attach-money' as IconName,
   list: 'list' as IconName,
   folder: 'folder' as IconName,
@@ -35,6 +37,7 @@ const ICONS = {
   save: 'save' as IconName,
   pdfExport: 'picture-as-pdf' as IconName,
   accessTime: 'access-time' as IconName,
+  help: 'help-outline' as IconName,
 } as const;
 
 export type IconKey = keyof typeof ICONS;
