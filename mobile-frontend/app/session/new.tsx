@@ -27,7 +27,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Shadows } from '@/constants/colors';
 import { Spacing, BorderRadius } from '@/constants/spacing';
 import { formatDateLong, getCurrentShift } from '@/utils/format';
-import { createSession, getOpenSession, getProfile } from '@/lib/db';
+import { createSession, getOpenSession, getProfile, createItem } from '@/lib/db';
+import { RAW_INVENTORY_ITEMS } from '@/constants/menu';
 
 type Shift = 'AM' | 'PM';
 
@@ -108,6 +109,23 @@ export default function NewSessionScreen() {
         cashier_name: cashierName.trim(),
         status: 'open',
       });
+
+      // Auto-create raw inventory items for the new session
+      for (const rawItem of RAW_INVENTORY_ITEMS) {
+        await createItem({
+          session_id: newSession.id,
+          item_name: rawItem.name,
+          unit: rawItem.unit,
+          price: rawItem.unitPrice.toString(),
+          beg_balance: null,
+          delivery: null,
+          pull_out: null,
+          sold_out: null,
+          ending: null,
+          remarks: null,
+          sort_order: rawItem.sortOrder,
+        });
+      }
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace(`/session/${newSession.id}` as any);
