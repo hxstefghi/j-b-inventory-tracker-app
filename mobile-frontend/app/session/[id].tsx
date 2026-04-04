@@ -38,13 +38,15 @@ import {
   getSessionById,
   getItemsBySession,
   getPresetsByUser,
+  getPosSalesBySession,
   createItem,
   updateItem,
   deleteItem,
   closeSession,
 } from '@/lib/db';
-import { generateSessionPDF } from '@/utils/pdf';
-import type { InventorySession, InventoryItem, PresetItem } from '@/lib/db/schema';
+import { generateSessionPDF, CalculatedSoldOutMap } from '@/utils/pdf';
+import type { InventorySession, InventoryItem, PresetItem, PosSale } from '@/lib/db/schema';
+import { RAW_INVENTORY_ITEMS, calculateRawInventoryFromSales } from '@/constants/menu';
 
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -52,10 +54,23 @@ export default function SessionDetailScreen() {
   const [sessionData, setSessionData] = useState<InventorySession | null>(null);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [presets, setPresets] = useState<PresetItem[]>([]);
+  const [posSales, setPosSales] = useState<PosSale[]>([]);
   const [loading, setLoading] = useState(true);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+
+  // Check if this is a new-style session with raw inventory items
+  const isNewStyleSession = items.length > 0 && 
+    RAW_INVENTORY_ITEMS.some(raw => items.some(item => item.item_name === raw.name));
+
+  // Calculate raw inventory from POS sales
+  const calculatedSoldOut = calculateRawInventoryFromSales(
+    posSales.map(sale => ({
+      menuItemId: sale.menu_item_id,
+      quantity: sale.quantity_sold,
+    }))
+  );
 
   const loadData = useCallback(async () => {
     if (!id || !authSession?.user) return;
@@ -63,10 +78,11 @@ export default function SessionDetailScreen() {
     try {
       setLoading(true);
       
-      const [session, sessionItems, userPresets] = await Promise.all([
+      const [session, sessionItems, userPresets, sessionPosSales] = await Promise.all([
         getSessionById(id),
         getItemsBySession(id),
         getPresetsByUser(authSession.user.id),
+        getPosSalesBySession(id),
       ]);
       
       // Log what we get from DB
@@ -81,6 +97,7 @@ export default function SessionDetailScreen() {
       setSessionData(session);
       setItems(sessionItems || []);
       setPresets(userPresets || []);
+      setPosSales(sessionPosSales || []);
     } catch (error) {
       console.error('Error loading session:', error);
       Alert.alert('Error', 'Failed to load session data');
@@ -93,12 +110,24 @@ export default function SessionDetailScreen() {
     loadData();
   }, [loadData]);
 
+  // Get sold out value for an item (from POS calculation for new-style sessions)
+  const getSoldOutValue = (item: InventoryItem): number => {
+    if (isNewStyleSession) {
+      // Find matching raw inventory item
+      const rawItem = RAW_INVENTORY_ITEMS.find(raw => raw.name === item.item_name);
+      if (rawItem) {
+        return calculatedSoldOut[rawItem.id] || 0;
+      }
+    }
+    // For old-style sessions, use the stored sold_out value
+    const soldOutVal = item.sold_out || '';
+    const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
+    return isNumeric ? parseFloat(soldOutVal) : 0;
+  };
+
   // Calculate grand total (only from sold_out if it's numeric)
   const grandTotal = items.reduce((sum, item) => {
-    const soldOutVal = item.sold_out || '';
-    // Check if sold_out is numeric
-    const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
-    const soldOut = isNumeric ? parseFloat(soldOutVal) : 0;
+    const soldOut = getSoldOutValue(item);
     const price = parseFloat(item.price?.toString() || '0');
     return sum + (soldOut * price);
   }, 0);
@@ -218,7 +247,20 @@ export default function SessionDetailScreen() {
     
     setExporting(true);
     try {
-      await generateSessionPDF(sessionData, items, grandTotal);
+      // Build calculatedSoldOut map using item names for PDF
+      let pdfCalculatedSoldOut: CalculatedSoldOutMap | undefined;
+      
+      if (isNewStyleSession) {
+        pdfCalculatedSoldOut = {};
+        items.forEach(item => {
+          const rawItem = RAW_INVENTORY_ITEMS.find(raw => raw.name === item.item_name);
+          if (rawItem) {
+            pdfCalculatedSoldOut![item.item_name] = calculatedSoldOut[rawItem.id] || 0;
+          }
+        });
+      }
+      
+      await generateSessionPDF(sessionData, items, grandTotal, pdfCalculatedSoldOut);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -292,17 +334,37 @@ export default function SessionDetailScreen() {
         </View>
       </View>
 
-      {/* Sticky Add Item Bar */}
+      {/* Sticky Add Bar - Different for new vs old style sessions */}
       {isSessionOpen && (
         <View style={styles.stickyAddBar}>
-          <TouchableOpacity
-            style={styles.stickyAddButton}
-            onPress={() => setPickerVisible(true)}
-            activeOpacity={0.7}
-          >
-            <IconSymbol name="add" size={18} color={Colors.primary} />
-            <Body color="primary" style={{ fontWeight: '600', fontSize: FontSizes.sm }}>Add Item</Body>
-          </TouchableOpacity>
+          {isNewStyleSession ? (
+            <TouchableOpacity
+              style={styles.stickyPosButton}
+              onPress={() => router.push(`/pos/${id}` as any)}
+              activeOpacity={0.7}
+            >
+              <IconSymbol name="receipt" size={18} color={Colors.primary} />
+              <Body color="primary" style={{ fontWeight: '600', fontSize: FontSizes.sm }}>
+                {posSales.length > 0 ? 'Edit POS Data' : 'Enter POS Data'}
+              </Body>
+              {posSales.length > 0 && (
+                <View style={styles.posDataBadge}>
+                  <Caption style={styles.posDataBadgeText}>
+                    {posSales.reduce((sum, s) => sum + s.quantity_sold, 0)} items
+                  </Caption>
+                </View>
+              )}
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              style={styles.stickyAddButton}
+              onPress={() => setPickerVisible(true)}
+              activeOpacity={0.7}
+            >
+              <IconSymbol name="add" size={18} color={Colors.primary} />
+              <Body color="primary" style={{ fontWeight: '600', fontSize: FontSizes.sm }}>Add Item</Body>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -330,6 +392,8 @@ export default function SessionDetailScreen() {
                   item={item}
                   index={index}
                   isEditable={isSessionOpen}
+                  isNewStyleSession={isNewStyleSession}
+                  calculatedSoldOut={getSoldOutValue(item)}
                   onUpdate={handleUpdateField}
                   onDelete={() => handleDeleteItem(item)}
                 />
@@ -464,15 +528,19 @@ interface ItemCardProps {
   item: InventoryItem;
   index: number;
   isEditable: boolean;
+  isNewStyleSession: boolean;
+  calculatedSoldOut: number;
   onUpdate: (itemId: string, field: string, value: string) => void;
   onDelete: () => void;
 }
 
-function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps) {
-  // Calculate total from sold_out (only if numeric)
-  const soldOutVal = item.sold_out || '';
-  const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
-  const soldOut = isNumeric ? parseFloat(soldOutVal) : 0;
+function ItemCard({ item, index, isEditable, isNewStyleSession, calculatedSoldOut, onUpdate, onDelete }: ItemCardProps) {
+  // Calculate total from sold_out
+  const soldOut = isNewStyleSession ? calculatedSoldOut : (() => {
+    const soldOutVal = item.sold_out || '';
+    const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
+    return isNumeric ? parseFloat(soldOutVal) : 0;
+  })();
   const price = parseFloat(item.price?.toString() || '0');
   const total = soldOut * price;
 
@@ -492,7 +560,7 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
             <Caption color="textMuted" style={styles.priceLabel}>PRICE</Caption>
             <Caption style={styles.priceValue}>{formatCurrency(price)}</Caption>
           </View>
-          {isEditable && (
+          {isEditable && !isNewStyleSession && (
             <TouchableOpacity 
               onPress={onDelete} 
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} 
@@ -585,19 +653,34 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
                 <Caption style={styles.stepNumberTextWhite}>4</Caption>
               </View>
               <Body style={styles.formSectionTitlePrimary}>Sold Out</Body>
-              <View style={styles.calculationBadge}>
-                <Caption style={styles.calculationBadgeText}>Used for total</Caption>
-              </View>
+              {isNewStyleSession ? (
+                <View style={styles.calculatedBadge}>
+                  <IconSymbol name="calculator" size={12} color={Colors.primary} />
+                  <Caption style={styles.calculatedBadgeText}>From POS</Caption>
+                </View>
+              ) : (
+                <View style={styles.calculationBadge}>
+                  <Caption style={styles.calculationBadgeText}>Used for total</Caption>
+                </View>
+              )}
             </View>
             <View style={styles.inputField}>
-              <InlineTextInput
-                value={item.sold_out || ''}
-                onChangeValue={(val) => onUpdate(item.id, 'sold_out', val)}
-                editable={isEditable}
-                placeholder="-"
-                keyboardType="numeric"
-                emphasized
-              />
+              {isNewStyleSession ? (
+                <View style={styles.calculatedValue}>
+                  <Body style={styles.calculatedValueText}>
+                    {soldOut > 0 ? soldOut.toString() : '-'}
+                  </Body>
+                </View>
+              ) : (
+                <InlineTextInput
+                  value={item.sold_out || ''}
+                  onChangeValue={(val) => onUpdate(item.id, 'sold_out', val)}
+                  editable={isEditable}
+                  placeholder="-"
+                  keyboardType="numeric"
+                  emphasized
+                />
+              )}
             </View>
           </View>
         </View>
@@ -800,6 +883,29 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     backgroundColor: Colors.primary + '05',
   },
+  stickyPosButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.primary + '08',
+  },
+  posDataBadge: {
+    backgroundColor: Colors.success + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  posDataBadgeText: {
+    color: Colors.success,
+    fontWeight: '600',
+    fontSize: 11,
+  },
   emptyCard: {
     marginBottom: Spacing.md,
   },
@@ -961,6 +1067,35 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: 'white',
+  },
+  calculatedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  calculatedBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  calculatedValue: {
+    backgroundColor: Colors.primary + '15',
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: Colors.primary + '30',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  calculatedValueText: {
+    fontSize: FontSizes.base,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   inputRow: {
     flexDirection: 'row',

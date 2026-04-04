@@ -12,14 +12,22 @@ import { formatCurrency, formatDateLong } from './format';
 import type { InventorySession, InventoryItem } from '@/lib/db/schema';
 
 /**
+ * Calculated sold out values from POS sales (optional)
+ * Map of item name to calculated quantity
+ */
+export type CalculatedSoldOutMap = Record<string, number>;
+
+/**
  * Generate and share a PDF report for an inventory session
+ * @param calculatedSoldOut Optional map of item name to calculated sold out from POS
  */
 export async function generateSessionPDF(
   session: InventorySession,
   items: InventoryItem[],
-  grandTotal: number
+  grandTotal: number,
+  calculatedSoldOut?: CalculatedSoldOutMap
 ): Promise<void> {
-  const html = generatePDFHTML(session, items, grandTotal);
+  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut);
   
   const { uri } = await Print.printToFileAsync({
     html,
@@ -43,7 +51,8 @@ export async function generateSessionPDF(
 function generatePDFHTML(
   session: InventorySession,
   items: InventoryItem[],
-  grandTotal: number
+  grandTotal: number,
+  calculatedSoldOut?: CalculatedSoldOutMap
 ): string {
   const sessionDate = new Date(session.session_date);
   const formattedDate = formatDateLong(sessionDate);
@@ -67,12 +76,26 @@ function generatePDFHTML(
     const delivery = item.delivery || '-';
     const pullOut = item.pull_out || '-';
     const ending = item.ending || '-';
-    const soldOut = item.sold_out || '-';
     
-    // Only calculate if soldOut is a valid number
+    // Use calculated sold out from POS if available, otherwise use stored value
+    let soldOutDisplay: string;
+    let soldOutNum: number;
+    
+    if (calculatedSoldOut && calculatedSoldOut[item.item_name] !== undefined) {
+      // New-style session with POS calculation
+      soldOutNum = calculatedSoldOut[item.item_name];
+      soldOutDisplay = soldOutNum > 0 ? soldOutNum.toString() : '-';
+    } else {
+      // Old-style session - use stored value
+      const storedSoldOut = item.sold_out || '-';
+      soldOutDisplay = storedSoldOut;
+      soldOutNum = parseFloat(storedSoldOut);
+      if (isNaN(soldOutNum)) soldOutNum = 0;
+    }
+    
+    // Calculate total
     const price = parseFloat(item.price?.toString() || '0');
-    const soldOutNum = parseFloat(soldOut);
-    const total = !isNaN(soldOutNum) && soldOutNum > 0 ? soldOutNum * price : 0;
+    const total = soldOutNum > 0 ? soldOutNum * price : 0;
     const remarks = item.remarks || '';
 
     return `
@@ -82,7 +105,7 @@ function generatePDFHTML(
         <td class="num-cell">${delivery}</td>
         <td class="num-cell">${pullOut}</td>
         <td class="num-cell">${ending}</td>
-        <td class="num-cell">${soldOut}</td>
+        <td class="num-cell">${soldOutDisplay}</td>
         <td class="price-cell">${price > 0 ? 'P' + price.toFixed(0) : '-'}</td>
         <td class="price-cell total-cell">${total > 0 ? 'P' + total.toFixed(0) : '-'}</td>
         <td class="remarks-cell">${remarks}</td>

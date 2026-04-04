@@ -9,7 +9,7 @@ import { Colors, Shadows } from '@/constants/colors';
 const TAB_CONFIG = [
   { name: 'index', icon: 'home', label: 'Home' },
   { name: 'explore', icon: 'history', label: 'History' },
-  { name: 'items', icon: 'category', label: 'Items' },
+  { name: 'pos', icon: 'receipt', label: 'POS' },
   { name: 'profile', icon: 'account', label: 'Profile' },
 ];
 
@@ -25,7 +25,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
     r.name === 'index' || r.name === 'explore'
   );
   const rightTabs = mainRoutes.filter((r: any) => 
-    r.name === 'items' || r.name === 'profile'
+    r.name === 'pos' || r.name === 'profile'
   );
 
   const renderTab = (route: any) => {
@@ -107,9 +107,9 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="items"
+        name="pos"
         options={{
-          title: 'Items',
+          title: 'POS',
         }}
       />
       <Tabs.Screen

@@ -66,6 +66,16 @@ export const presetItems = pgTable('preset_items', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+// POS Sales table - tracks menu items sold per session
+export const posSales = pgTable('pos_sales', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  sessionId: uuid('session_id').notNull(),
+  menuItemId: text('menu_item_id').notNull(), // References MENU_ITEMS constant
+  quantitySold: integer('quantity_sold').default(0),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+});
+
 // Type exports - Using snake_case to match Supabase response
 export interface Profile {
   id: string;
@@ -153,4 +163,24 @@ export interface NewPresetItem {
   unit?: string;
   default_price?: string;
   sort_order?: number;
+}
+
+// POS Sales types
+export interface PosSale {
+  id: string;
+  session_id: string;
+  menu_item_id: string;
+  quantity_sold: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewPosSale {
+  session_id: string;
+  menu_item_id: string;
+  quantity_sold: number;
+}
+
+export interface PosSaleUpdate {
+  quantity_sold: number;
 }
