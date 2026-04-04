@@ -47,6 +47,18 @@ function generatePDFHTML(
 ): string {
   const sessionDate = new Date(session.session_date);
   const formattedDate = formatDateLong(sessionDate);
+  
+  // Format current time in Philippines timezone
+  const now = new Date();
+  const phTime = now.toLocaleString('en-PH', { 
+    timeZone: 'Asia/Manila',
+    month: 'numeric',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
 
   // Generate table rows
   const tableRows = items.map((item, index) => {
@@ -93,158 +105,120 @@ function generatePDFHTML(
         
         body {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          font-size: 11px;
+          font-size: 10px;
           color: #1A1A1A;
-          padding: 24px;
+          padding: 20px;
           background: white;
         }
         
         .header {
+          margin-bottom: 16px;
+          padding-bottom: 12px;
+          border-bottom: 2px solid #CCCCCC;
+        }
+        
+        .header-top {
           display: flex;
-          align-items: center;
           justify-content: space-between;
-          margin-bottom: 24px;
-          padding-bottom: 16px;
-          border-bottom: 3px solid #FF6B00;
+          align-items: flex-start;
+          margin-bottom: 8px;
         }
         
-        .brand {
-          display: flex;
-          align-items: center;
-          gap: 12px;
+        .header-left {
+          flex: 1;
         }
         
-        .logo-circle {
-          width: 48px;
-          height: 48px;
-          background: #FF6B00;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: 700;
-          font-size: 16px;
-        }
-        
-        .brand-text {
-          display: flex;
-          flex-direction: column;
-        }
-        
-        .brand-name {
-          font-size: 22px;
-          font-weight: 700;
-          color: #1A1A1A;
-          letter-spacing: -0.5px;
-        }
-        
-        .brand-subtitle {
-          font-size: 12px;
+        .header-title {
+          font-size: 11px;
+          font-weight: 600;
           color: #666666;
-          font-weight: 500;
+          text-transform: uppercase;
+          margin-bottom: 4px;
         }
         
-        .report-title {
+        .session-meta {
+          font-size: 10px;
+          color: #666666;
+          line-height: 1.6;
+        }
+        
+        .session-meta-row {
+          margin-bottom: 2px;
+        }
+        
+        .meta-label {
+          font-weight: 600;
+          display: inline-block;
+          min-width: 60px;
+        }
+        
+        .header-right {
           text-align: right;
         }
         
-        .report-label {
-          font-size: 10px;
-          color: #999999;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-        }
-        
         .report-date {
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 600;
           color: #1A1A1A;
+          margin-bottom: 2px;
         }
         
-        .session-info {
-          display: flex;
-          gap: 32px;
-          margin-bottom: 20px;
-          padding: 16px 20px;
-          background: #F5F5F5;
-          border-radius: 12px;
-        }
-        
-        .info-item {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-        }
-        
-        .info-label {
+        .report-shift {
           font-size: 10px;
-          color: #999999;
-          text-transform: uppercase;
-          letter-spacing: 0.5px;
-          font-weight: 600;
-        }
-        
-        .info-value {
-          font-size: 14px;
-          color: #1A1A1A;
-          font-weight: 600;
-        }
-        
-        .info-value.shift {
-          color: #FF6B00;
+          color: #666666;
         }
         
         table {
           width: 100%;
           border-collapse: collapse;
-          margin-bottom: 20px;
-          border-radius: 8px;
-          overflow: hidden;
+          margin-bottom: 16px;
+          margin-top: 12px;
         }
         
         th {
-          background: #1A1A1A;
-          color: white;
+          background: transparent;
+          color: #999999;
           font-weight: 600;
           font-size: 9px;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
-          padding: 12px 8px;
+          letter-spacing: 0.3px;
+          padding: 8px 6px;
           text-align: center;
+          border-bottom: 1px solid #CCCCCC;
         }
         
         th:first-child {
           text-align: left;
-          padding-left: 12px;
+          padding-left: 8px;
         }
         
         td {
-          padding: 10px 8px;
+          padding: 8px 6px;
           border-bottom: 1px solid #E5E5E5;
           vertical-align: middle;
+          font-size: 10px;
         }
         
         tr:last-child td {
-          border-bottom: none;
+          border-bottom: 1px solid #CCCCCC;
         }
         
         .item-cell {
           font-weight: 500;
-          padding-left: 12px;
+          padding-left: 8px;
           color: #1A1A1A;
         }
         
         .num-cell {
           text-align: center;
-          color: #666666;
-          font-size: 11px;
+          color: #333333;
+          font-size: 10px;
         }
         
         .price-cell {
           text-align: center;
-          color: #666666;
-          font-size: 11px;
+          color: #333333;
+          font-size: 10px;
         }
         
         .total-cell {
@@ -253,103 +227,75 @@ function generatePDFHTML(
         }
         
         .remarks-cell {
-          font-size: 10px;
-          color: #999999;
+          font-size: 9px;
+          color: #666666;
           max-width: 80px;
+          font-style: italic;
         }
         
-        .grand-total {
+        .grand-total-row {
+          margin-top: 12px;
+          padding: 12px 8px;
+          border-top: 2px solid #1A1A1A;
           display: flex;
           justify-content: flex-end;
           align-items: center;
-          gap: 24px;
-          padding: 20px 24px;
-          background: #FF6B00;
-          border-radius: 12px;
-          margin-bottom: 24px;
+          gap: 20px;
         }
         
         .grand-total-label {
-          font-weight: 600;
-          font-size: 14px;
-          color: white;
+          font-weight: 700;
+          font-size: 12px;
+          color: #1A1A1A;
           text-transform: uppercase;
-          letter-spacing: 1px;
         }
         
         .grand-total-value {
-          font-size: 20px;
+          font-size: 18px;
           font-weight: 700;
-          color: white;
+          color: #1A1A1A;
         }
         
         .footer {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding-top: 16px;
+          margin-top: 20px;
+          padding-top: 12px;
           border-top: 1px solid #E5E5E5;
+          text-align: right;
           color: #999999;
-          font-size: 10px;
-        }
-        
-        .footer-brand {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        
-        .footer-dot {
-          width: 6px;
-          height: 6px;
-          background: #FF6B00;
-          border-radius: 50%;
+          font-size: 9px;
         }
       </style>
     </head>
     <body>
       <div class="header">
-        <div class="brand">
-          <div class="logo-circle">JB</div>
-          <div class="brand-text">
-            <span class="brand-name">JB Chicken</span>
-            <span class="brand-subtitle">Inventory Report</span>
+        <div class="header-top">
+          <div class="header-left">
+            <div class="header-title">Inventory Report</div>
+            <div class="session-meta">
+              <div class="session-meta-row">
+                <span class="meta-label">Cashier:</span> ${session.cashier_name}
+              </div>
+              <div class="session-meta-row">
+                <span class="meta-label">Status:</span> ${session.status === 'open' ? 'Open' : 'Closed'}
+              </div>
+            </div>
           </div>
-        </div>
-        <div class="report-title">
-          <div class="report-label">Report Date</div>
-          <div class="report-date">${formattedDate}</div>
-        </div>
-      </div>
-      
-      <div class="session-info">
-        <div class="info-item">
-          <span class="info-label">Shift</span>
-          <span class="info-value shift">${session.shift}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Cashier</span>
-          <span class="info-value">${session.cashier_name}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Status</span>
-          <span class="info-value">${session.status === 'open' ? 'Open' : 'Closed'}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">Items</span>
-          <span class="info-value">${items.length}</span>
+          <div class="header-right">
+            <div class="report-date">${formattedDate}</div>
+            <div class="report-shift">${session.shift} Shift</div>
+          </div>
         </div>
       </div>
       
       <table>
         <thead>
           <tr>
-            <th>Item</th>
-            <th>Beg</th>
-            <th>Del</th>
-            <th>Pull</th>
-            <th>End</th>
-            <th>Sold</th>
+            <th>Items</th>
+            <th>Beg. Balance</th>
+            <th>Delivery</th>
+            <th>Pull Out</th>
+            <th>Ending</th>
+            <th>Sold Out</th>
             <th>Price</th>
             <th>Total</th>
             <th>Remarks</th>
@@ -360,17 +306,13 @@ function generatePDFHTML(
         </tbody>
       </table>
       
-      <div class="grand-total">
+      <div class="grand-total-row">
         <span class="grand-total-label">Grand Total</span>
-        <span class="grand-total-value">P${grandTotal.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
+        <span class="grand-total-value">₱${grandTotal.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
       </div>
       
       <div class="footer">
-        <div class="footer-brand">
-          <span class="footer-dot"></span>
-          <span>Generated by JB Inventory Tracker</span>
-        </div>
-        <span>${new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })} at ${new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</span>
+        Generated ${phTime}
       </div>
     </body>
     </html>

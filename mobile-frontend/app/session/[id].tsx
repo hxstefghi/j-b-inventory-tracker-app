@@ -79,8 +79,8 @@ export default function SessionDetailScreen() {
       })));
       
       setSessionData(session);
-      setItems(sessionItems);
-      setPresets(userPresets);
+      setItems(sessionItems || []);
+      setPresets(userPresets || []);
     } catch (error) {
       console.error('Error loading session:', error);
       Alert.alert('Error', 'Failed to load session data');
