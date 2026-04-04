@@ -31,8 +31,8 @@ export default function HistoryScreen() {
     
     try {
       const sessions = await getSessionsByUser(session.user.id, 100);
-      setAllSessions(sessions);
-      groupSessions(sessions, activeFilter);
+      setAllSessions(sessions || []);
+      groupSessions(sessions || [], activeFilter);
     } catch (error) {
       console.error('Error loading sessions:', error);
     } finally {
@@ -42,12 +42,15 @@ export default function HistoryScreen() {
   };
 
   const groupSessions = (sessions: InventorySession[], filter: FilterType) => {
+    // Handle null/undefined sessions
+    const validSessions = sessions || [];
+    
     // Apply filter
-    let filtered = sessions;
+    let filtered = validSessions;
     if (filter === 'open') {
-      filtered = sessions.filter(s => s.status === 'open');
+      filtered = validSessions.filter(s => s.status === 'open');
     } else if (filter === 'closed') {
-      filtered = sessions.filter(s => s.status === 'closed');
+      filtered = validSessions.filter(s => s.status === 'closed');
     }
 
     // Group by date

@@ -7,6 +7,7 @@
 import { useState, useEffect } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { createProfile } from "@/lib/db";
 
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
@@ -61,6 +62,15 @@ export function useAuth() {
         },
       },
     });
+
+    // Create profile after successful signup
+    if (!error && data?.user) {
+      try {
+        await createProfile(data.user.id, fullName);
+      } catch (profileError) {
+        console.error('Error creating profile:', profileError);
+      }
+    }
 
     return { data, error };
   };
