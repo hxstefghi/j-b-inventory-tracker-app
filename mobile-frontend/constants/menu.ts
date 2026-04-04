@@ -28,12 +28,12 @@ export interface MenuCategoryConfig {
 
 export const MENU_CATEGORIES: MenuCategoryConfig[] = [
   { id: 'meals_with_rice', label: 'Meals with Rice', icon: 'restaurant' },
-  { id: 'ala_carte', label: 'Ala Carte', icon: 'drumstickBite' },
+  { id: 'ala_carte', label: 'Ala Carte', icon: 'restaurant' },
   { id: 'assorted', label: 'Assorted Parts', icon: 'category' },
   { id: 'combos', label: 'Combo Meals', icon: 'star' },
-  { id: 'chicken_skin', label: 'Chicken Skin', icon: 'localFireDepartment' },
-  { id: 'extras', label: 'Extras', icon: 'addCircle' },
-  { id: 'drinks', label: 'Drinks', icon: 'localCafe' },
+  { id: 'chicken_skin', label: 'Chicken Skin', icon: 'info' },
+  { id: 'extras', label: 'Extras', icon: 'add' },
+  { id: 'drinks', label: 'Drinks', icon: 'info' },
 ];
 
 /**
