@@ -7,7 +7,7 @@
  * - Cashier name input
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,17 +27,36 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Shadows } from '@/constants/colors';
 import { Spacing, BorderRadius } from '@/constants/spacing';
 import { formatDateLong, getCurrentShift } from '@/utils/format';
-import { createSession, getOpenSession } from '@/lib/db';
+import { createSession, getOpenSession, getProfile } from '@/lib/db';
 
 type Shift = 'AM' | 'PM';
 
 export default function NewSessionScreen() {
-  const { session } = useAuth();
+  const { session: authSession } = useAuth();
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [shift, setShift] = useState<Shift>(getCurrentShift());
   const [cashierName, setCashierName] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Load user's profile to get their name
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!authSession?.user) return;
+      
+      try {
+        const profile = await getProfile(authSession.user.id);
+        if (profile?.full_name) {
+          const firstName = profile.full_name.split(' ')[0];
+          setCashierName(firstName);
+        }
+      } catch (error) {
+        console.error('Error loading profile:', error);
+      }
+    };
+    
+    loadUserProfile();
+  }, [authSession?.user]);
 
   const handleDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -49,7 +68,7 @@ export default function NewSessionScreen() {
   };
 
   const handleCreateSession = async () => {
-    if (!session?.user) {
+    if (!authSession?.user) {
       Alert.alert('Error', 'You must be logged in');
       return;
     }
@@ -64,7 +83,7 @@ export default function NewSessionScreen() {
 
     try {
       // Check if session already exists for this date/shift
-      const existingSession = await getOpenSession(session.user.id, date, shift);
+      const existingSession = await getOpenSession(authSession.user.id, date, shift);
       if (existingSession) {
         Alert.alert(
           'Session Exists',
@@ -83,7 +102,7 @@ export default function NewSessionScreen() {
 
       // Create new session
       const newSession = await createSession({
-        user_id: session.user.id,
+        user_id: authSession.user.id,
         session_date: date.toISOString(),
         shift,
         cashier_name: cashierName.trim(),

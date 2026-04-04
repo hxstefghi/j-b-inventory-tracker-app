@@ -18,6 +18,27 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     .eq('id', userId)
     .single();
   
+  if (error) {
+    // Return null if profile doesn't exist (don't throw)
+    if (error.code === 'PGRST116') {
+      return null;
+    }
+    throw error;
+  }
+  return data as Profile;
+}
+
+export async function createProfile(userId: string, fullName: string): Promise<Profile> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .insert({
+      id: userId,
+      full_name: fullName,
+      role: 'cashier',
+    })
+    .select()
+    .single();
+  
   if (error) throw error;
   return data as Profile;
 }
@@ -47,7 +68,7 @@ export async function getSessionsByUser(userId: string, limit = 50): Promise<Inv
     .limit(limit);
   
   if (error) throw error;
-  return data as InventorySession[];
+  return (data || []) as InventorySession[];
 }
 
 export async function getSessionById(sessionId: string): Promise<InventorySession | null> {
@@ -115,7 +136,7 @@ export async function getItemsBySession(sessionId: string): Promise<InventoryIte
     .order('sort_order', { ascending: true });
   
   if (error) throw error;
-  return data as InventoryItem[];
+  return (data || []) as InventoryItem[];
 }
 
 export async function createItem(item: any): Promise<InventoryItem> {
@@ -175,7 +196,7 @@ export async function getPresetsByUser(userId: string): Promise<PresetItem[]> {
     .order('sort_order', { ascending: true });
   
   if (error) throw error;
-  return data as PresetItem[];
+  return (data || []) as PresetItem[];
 }
 
 export async function createPreset(preset: any): Promise<PresetItem> {
