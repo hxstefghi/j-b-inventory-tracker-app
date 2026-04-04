@@ -1,12 +1,11 @@
 /**
  * Session Detail Screen - Inventory Tracking Table
  * 
- * Core feature where mom:
- * 1. Adds items from saved presets
- * 2. Manually enters: Beg. Balance, Delivery, Pull Out, Ending (can be numbers OR text like "N/A", "broken")
- * 3. Manually enters: Sold Out (numbers only, used for computation)
- * 4. App auto-computes: Total = Sold Out × Price (only if Sold Out is numeric)
- * 5. Exports to PDF
+ * Two-step flow:
+ * Step 1: POS Data Entry - Enter menu items sold from POS
+ * Step 2: Raw Inventory - Review/edit inventory with auto-calculated Sold Out
+ * 
+ * For old-style sessions (no raw inventory items), skip to inventory UI.
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -18,13 +17,11 @@ import {
   Alert,
   TextInput,
   Modal,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
-  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/use-auth';
 import { Title, Subtitle, Body, Caption, Label } from '@/components/text';
@@ -38,24 +35,92 @@ import {
   getSessionById,
   getItemsBySession,
   getPresetsByUser,
+  getPosSalesBySession,
   createItem,
   updateItem,
   deleteItem,
   closeSession,
+  upsertPosSalesBatch,
 } from '@/lib/db';
-import { generateSessionPDF } from '@/utils/pdf';
-import type { InventorySession, InventoryItem, PresetItem } from '@/lib/db/schema';
+import { generateSessionPDF, CalculatedSoldOutMap } from '@/utils/pdf';
+import type { InventorySession, InventoryItem, PresetItem, PosSale } from '@/lib/db/schema';
+import { 
+  RAW_INVENTORY_ITEMS, 
+  calculateRawInventoryFromSales,
+  MENU_ITEMS,
+  MENU_CATEGORIES,
+  getMenuItemsByCategory,
+  MenuCategory,
+} from '@/constants/menu';
+
+type SessionStep = 'pos' | 'inventory';
 
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session: authSession } = useAuth();
+  const navigation = useNavigation();
+  
   const [sessionData, setSessionData] = useState<InventorySession | null>(null);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [presets, setPresets] = useState<PresetItem[]>([]);
+  const [posSales, setPosSales] = useState<PosSale[]>([]);
   const [loading, setLoading] = useState(true);
+  const [dataLoaded, setDataLoaded] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [selectedPresets, setSelectedPresets] = useState<Set<string>>(new Set());
   const [exporting, setExporting] = useState(false);
+  
+  // Step navigation
+  const [currentStep, setCurrentStep] = useState<SessionStep>('pos');
+  
+  // POS data (integrated from pos/[id].tsx)
+  const [salesEntries, setSalesEntries] = useState<Map<string, number>>(new Map());
+  const [savingPos, setSavingPos] = useState(false);
+  const [hasUnsavedPosChanges, setHasUnsavedPosChanges] = useState(false);
+
+  // Check if this is a new-style session with raw inventory items
+  // Need to check AFTER data is loaded
+  const isNewStyleSession = dataLoaded && items.length > 0 && 
+    RAW_INVENTORY_ITEMS.some(raw => items.some(item => item.item_name === raw.name));
+
+  // Calculate raw inventory from POS sales (only if loaded)
+  const calculatedSoldOut = dataLoaded ? calculateRawInventoryFromSales(
+    posSales.map(sale => ({
+      menuItemId: sale.menu_item_id,
+      quantity: sale.quantity_sold,
+    }))
+  ) : {};
+
+  // For step 1 - calculate from current salesEntries
+  const calculatedSoldOutFromEntries = dataLoaded ? calculateRawInventoryFromSales(
+    Array.from(salesEntries.entries()).map(([menuItemId, quantity]) => ({
+      menuItemId,
+      quantity,
+    }))
+  ) : {};
+
+  // Determine initial step based on session type (after data loads)
+  useEffect(() => {
+    if (dataLoaded && !isNewStyleSession) {
+      setCurrentStep('inventory');
+    }
+  }, [dataLoaded, isNewStyleSession]);
+
+  // Derived value - used in beforeRemove listener
+  const isSessionOpen = sessionData?.status === 'open';
+
+  // Warn on unsaved changes when navigating away
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      if (hasUnsavedPosChanges && isSessionOpen) {
+        e.preventDefault();
+        handleUnsavedChangesWarning(() => {
+          navigation.dispatch(e.data.action);
+        });
+      }
+    });
+    return unsubscribe;
+  }, [hasUnsavedPosChanges, isSessionOpen, navigation]);
 
   const loadData = useCallback(async () => {
     if (!id || !authSession?.user) return;
@@ -63,24 +128,26 @@ export default function SessionDetailScreen() {
     try {
       setLoading(true);
       
-      const [session, sessionItems, userPresets] = await Promise.all([
+      const [session, sessionItems, userPresets, sessionPosSales] = await Promise.all([
         getSessionById(id),
         getItemsBySession(id),
         getPresetsByUser(authSession.user.id),
+        getPosSalesBySession(id),
       ]);
-      
-      // Log what we get from DB
-      console.log('Session Items from DB:', sessionItems.map(item => ({
-        id: item.id,
-        beg_balance: item.beg_balance,
-        delivery: item.delivery,
-        pull_out: item.pull_out,
-        sold_out: item.sold_out
-      })));
       
       setSessionData(session);
       setItems(sessionItems || []);
       setPresets(userPresets || []);
+      setPosSales(sessionPosSales || []);
+      
+      // Load existing POS sales into state
+      const entriesMap = new Map<string, number>();
+      for (const sale of sessionPosSales) {
+        entriesMap.set(sale.menu_item_id, sale.quantity_sold);
+      }
+      setSalesEntries(entriesMap);
+      
+      setDataLoaded(true);
     } catch (error) {
       console.error('Error loading session:', error);
       Alert.alert('Error', 'Failed to load session data');
@@ -93,12 +160,22 @@ export default function SessionDetailScreen() {
     loadData();
   }, [loadData]);
 
+  // Get sold out value for an item (from POS calculation for new-style sessions)
+  const getSoldOutValue = (item: InventoryItem): number => {
+    if (isNewStyleSession) {
+      const rawItem = RAW_INVENTORY_ITEMS.find(raw => raw.name === item.item_name);
+      if (rawItem) {
+        return calculatedSoldOut[rawItem.id] || 0;
+      }
+    }
+    const soldOutVal = item.sold_out || '';
+    const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
+    return isNumeric ? parseFloat(soldOutVal) : 0;
+  };
+
   // Calculate grand total (only from sold_out if it's numeric)
   const grandTotal = items.reduce((sum, item) => {
-    const soldOutVal = item.sold_out || '';
-    // Check if sold_out is numeric
-    const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
-    const soldOut = isNumeric ? parseFloat(soldOutVal) : 0;
+    const soldOut = getSoldOutValue(item);
     const price = parseFloat(item.price?.toString() || '0');
     return sum + (soldOut * price);
   }, 0);
@@ -109,15 +186,12 @@ export default function SessionDetailScreen() {
     field: string,
     value: string
   ) => {
-    // Skip generated column (total is computed by DB)
     if (field === 'total') return;
     
     try {
-      // Convert empty strings to null for PostgreSQL
       const dbValue = value === '' ? null : value;
       await updateItem(itemId, { [field]: dbValue });
       
-      // Update local state
       setItems(prev =>
         prev.map(item =>
           item.id === itemId ? { ...item, [field]: value } : item
@@ -135,7 +209,6 @@ export default function SessionDetailScreen() {
     try {
       const selectedItems = presets.filter(p => selectedPresets.has(p.id));
       
-      // Create items with null values (will show as "-" in UI)
       const newItems = selectedItems.map((preset, idx) => ({
         session_id: id,
         item_name: preset.item_name,
@@ -148,7 +221,6 @@ export default function SessionDetailScreen() {
         sort_order: items.length + idx,
       }));
 
-      // Insert all items
       for (const item of newItems) {
         await createItem(item);
       }
@@ -156,8 +228,6 @@ export default function SessionDetailScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setPickerVisible(false);
       setSelectedPresets(new Set());
-      
-      // Refresh data to get new items with IDs
       await loadData();
     } catch (error) {
       console.error('Error adding items:', error);
@@ -193,7 +263,7 @@ export default function SessionDetailScreen() {
   const handleCloseSession = () => {
     Alert.alert(
       'Close Session',
-      'Are you sure you want to close this session? You can still view it but cannot make changes.',
+      'Are you sure you want to close this session?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -218,7 +288,19 @@ export default function SessionDetailScreen() {
     
     setExporting(true);
     try {
-      await generateSessionPDF(sessionData, items, grandTotal);
+      let pdfCalculatedSoldOut: CalculatedSoldOutMap | undefined;
+      
+      if (isNewStyleSession) {
+        pdfCalculatedSoldOut = {};
+        items.forEach(item => {
+          const rawItem = RAW_INVENTORY_ITEMS.find(raw => raw.name === item.item_name);
+          if (rawItem) {
+            pdfCalculatedSoldOut![item.item_name] = calculatedSoldOut[rawItem.id] || 0;
+          }
+        });
+      }
+      
+      await generateSessionPDF(sessionData, items, grandTotal, pdfCalculatedSoldOut, totalMenuSales);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -228,20 +310,100 @@ export default function SessionDetailScreen() {
     }
   };
 
-  // Toggle preset selection
-  const togglePresetSelection = (presetId: string) => {
-    setSelectedPresets(prev => {
-      const next = new Set(prev);
-      if (next.has(presetId)) {
-        next.delete(presetId);
+  // ========== POS STEP HANDLERS ==========
+  
+  const updateQuantity = (menuItemId: string, quantity: number) => {
+    setSalesEntries(prev => {
+      const next = new Map(prev);
+      if (quantity > 0) {
+        next.set(menuItemId, quantity);
       } else {
-        next.add(presetId);
+        next.delete(menuItemId);
       }
       return next;
     });
+    setHasUnsavedPosChanges(true);
   };
 
-  const isSessionOpen = sessionData?.status === 'open';
+  const adjustQuantity = (menuItemId: string, delta: number) => {
+    const current = salesEntries.get(menuItemId) || 0;
+    const newValue = Math.max(0, current + delta);
+    updateQuantity(menuItemId, newValue);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleSavePOSAndProceed = async () => {
+    if (!id) return;
+
+    setSavingPos(true);
+    try {
+      const salesArray = Array.from(salesEntries.entries()).map(([menuItemId, qty]) => ({
+        menuItemId,
+        quantitySold: qty,
+      }));
+
+      // Include items with 0 quantity to clear them
+      for (const menuItem of MENU_ITEMS) {
+        if (!salesEntries.has(menuItem.id)) {
+          salesArray.push({
+            menuItemId: menuItem.id,
+            quantitySold: 0,
+          });
+        }
+      }
+
+      await upsertPosSalesBatch(id, salesArray);
+      
+      // Reload to get fresh data
+      await loadData();
+      
+      setHasUnsavedPosChanges(false);
+      setCurrentStep('inventory');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      console.error('Error saving POS data:', error);
+      Alert.alert('Error', 'Failed to save POS data. Please try again.');
+    } finally {
+      setSavingPos(false);
+    }
+  };
+
+  const handleUnsavedChangesWarning = (onDiscard: () => void) => {
+    Alert.alert(
+      'Unsaved POS Data',
+      'You have unsaved POS data. What would you like to do?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            setHasUnsavedPosChanges(false);
+            onDiscard();
+          },
+        },
+        {
+          text: 'Save & Leave',
+          onPress: async () => {
+            await handleSavePOSAndProceed();
+            onDiscard();
+          },
+        },
+      ]
+    );
+  };
+
+  const goBackToPOS = () => {
+    setCurrentStep('pos');
+  };
+
+  // Calculate totals for POS summary
+  const totalMenuSales = Array.from(salesEntries.entries()).reduce((sum, [menuItemId, qty]) => {
+    const menuItem = MENU_ITEMS.find(m => m.id === menuItemId);
+    return sum + (menuItem ? menuItem.price * qty : 0);
+  }, 0);
+
+  const totalItemsSold = Array.from(salesEntries.values()).reduce((sum, qty) => sum + qty, 0);
 
   if (loading) {
     return (
@@ -292,16 +454,57 @@ export default function SessionDetailScreen() {
         </View>
       </View>
 
-      {/* Sticky Add Item Bar */}
-      {isSessionOpen && (
-        <View style={styles.stickyAddBar}>
-          <TouchableOpacity
-            style={styles.stickyAddButton}
-            onPress={() => setPickerVisible(true)}
-            activeOpacity={0.7}
+      {/* Step Indicator (only for new-style sessions) */}
+      {isNewStyleSession && (
+        <View style={styles.stepIndicator}>
+          <TouchableOpacity 
+            style={[styles.stepItem, currentStep === 'pos' && styles.stepItemActive]}
+            onPress={() => isSessionOpen && setCurrentStep('pos')}
+            disabled={!isSessionOpen}
           >
-            <IconSymbol name="add" size={18} color={Colors.primary} />
-            <Body color="primary" style={{ fontWeight: '600', fontSize: FontSizes.sm }}>Add Item</Body>
+            <View style={[
+              styles.stepCircle,
+              currentStep === 'pos' && styles.stepCircleActive,
+              currentStep === 'inventory' && styles.stepCircleCompleted,
+            ]}>
+              {currentStep === 'inventory' ? (
+                <IconSymbol name="check" size={12} color="white" />
+              ) : (
+                <Caption style={currentStep === 'pos' ? styles.stepCircleTextActive : styles.stepCircleText}>
+                  1
+                </Caption>
+              )}
+            </View>
+            <Caption style={[
+              styles.stepLabel,
+              currentStep === 'pos' && styles.stepLabelActive,
+            ]}>POS Data</Caption>
+          </TouchableOpacity>
+          
+          <View style={styles.stepLine}>
+            <View style={[
+              styles.stepLineInner,
+              currentStep === 'inventory' && styles.stepLineCompleted,
+            ]} />
+          </View>
+          
+          <TouchableOpacity 
+            style={[styles.stepItem, currentStep === 'inventory' && styles.stepItemActive]}
+            onPress={() => isSessionOpen && setCurrentStep('inventory')}
+            disabled={!isSessionOpen}
+          >
+            <View style={[
+              styles.stepCircle,
+              currentStep === 'inventory' && styles.stepCircleActive,
+            ]}>
+              <Caption style={currentStep === 'inventory' ? styles.stepCircleTextActive : styles.stepCircleText}>
+                2
+              </Caption>
+            </View>
+            <Caption style={[
+              styles.stepLabel,
+              currentStep === 'inventory' && styles.stepLabelActive,
+            ]}>Inventory</Caption>
           </TouchableOpacity>
         </View>
       )}
@@ -311,79 +514,91 @@ export default function SessionDetailScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.content}>
-          {/* Items List */}
-          {items.length === 0 ? (
-            <Card variant="outlined" style={styles.emptyCard}>
-              <CardContent style={styles.emptyContent}>
-                <IconSymbol name="inventory" size={40} color={Colors.textMuted} />
-                <Subtitle color="textMuted" style={styles.emptyTitle}>No items yet</Subtitle>
-                <Body color="textMuted" style={styles.emptyText}>
-                  Tap "Add Item" to start tracking inventory
-                </Body>
-              </CardContent>
-            </Card>
-          ) : (
-            <View style={styles.itemsList}>
-              {items.map((item, index) => (
-                <ItemCard
-                  key={item.id}
-                  item={item}
-                  index={index}
-                  isEditable={isSessionOpen}
-                  onUpdate={handleUpdateField}
-                  onDelete={() => handleDeleteItem(item)}
-                />
-              ))}
-            </View>
+          {/* STEP 1: POS DATA ENTRY */}
+          {currentStep === 'pos' && isNewStyleSession && (
+            <POSDataStep
+              salesEntries={salesEntries}
+              totalItemsSold={totalItemsSold}
+              totalMenuSales={totalMenuSales}
+              calculatedInventory={calculatedSoldOutFromEntries}
+              onUpdateQuantity={updateQuantity}
+              onAdjustQuantity={adjustQuantity}
+              isEditable={isSessionOpen}
+            />
+          )}
+
+          {/* STEP 2: INVENTORY (or old-style sessions) */}
+          {(currentStep === 'inventory' || !isNewStyleSession) && (
+            <InventoryStep
+              items={items}
+              presets={presets}
+              isNewStyleSession={isNewStyleSession}
+              isSessionOpen={isSessionOpen}
+              getSoldOutValue={getSoldOutValue}
+              grandTotal={grandTotal}
+              posTotal={totalMenuSales}
+              onUpdateField={handleUpdateField}
+              onDeleteItem={handleDeleteItem}
+              onAddItem={() => setPickerVisible(true)}
+            />
           )}
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Compact Bottom Section: Grand Total + Action Buttons */}
-      {items.length > 0 && (
+      {/* Bottom Action Bar */}
+      {isNewStyleSession && items.length > 0 && (
         <View style={styles.bottomSection}>
-          {/* Compact Grand Total */}
-          <View style={styles.grandTotalCard}>
-            <View style={styles.grandTotalIcon}>
-              <IconSymbol name="attachMoney" size={20} color="white" />
-            </View>
-            <View style={styles.grandTotalInfo}>
-              <Caption style={styles.grandTotalLabel}>Total Sales</Caption>
-              <Title style={styles.grandTotalAmount}>{formatCurrency(grandTotal)}</Title>
-            </View>
-          </View>
-
-          {/* Compact Action Buttons */}
-          <View style={styles.actionButtonsRow}>
-            {/* Export to PDF Button */}
+          {currentStep === 'pos' ? (
             <TouchableOpacity
-              style={styles.exportButton}
-              onPress={handleExportPDF}
-              disabled={exporting || items.length === 0}
-              activeOpacity={0.7}
+              style={[styles.nextButton, savingPos && styles.nextButtonDisabled]}
+              onPress={handleSavePOSAndProceed}
+              disabled={savingPos}
+              activeOpacity={0.8}
             >
-              <IconSymbol 
-                name="pdfExport" 
-                size={18} 
-                color={exporting ? Colors.textMuted : Colors.primary} 
-              />
-              <Body style={styles.exportButtonLabel}>
-                {exporting ? 'Exporting...' : 'Export to PDF'}
+              <IconSymbol name="arrowForward" size={20} color="white" />
+              <Body style={styles.nextButtonText}>
+                {savingPos ? 'Saving...' : 'Next: Review Inventory'}
               </Body>
             </TouchableOpacity>
-
-            {/* Complete Session Button */}
-            {isSessionOpen && (
+          ) : (
+            <View style={styles.actionButtonsRow}>
               <TouchableOpacity
-                style={styles.completeButton}
-                onPress={handleCloseSession}
+                style={styles.backButtonPos}
+                onPress={goBackToPOS}
                 activeOpacity={0.7}
               >
-                <IconSymbol name="lockClosed" size={18} color="white" />
-                <Body style={styles.completeButtonLabel}>Complete Session</Body>
+                <IconSymbol name="arrowBack" size={18} color={Colors.primary} />
+                <Body color="primary">Back to POS</Body>
               </TouchableOpacity>
-            )}
-          </View>
+              
+              <TouchableOpacity
+                style={styles.exportButton}
+                onPress={handleExportPDF}
+                disabled={exporting}
+                activeOpacity={0.7}
+              >
+                <IconSymbol 
+                  name="pdfExport" 
+                  size={18} 
+                  color={exporting ? Colors.textMuted : Colors.primary} 
+                />
+                <Body style={styles.exportButtonLabel}>
+                  {exporting ? 'Exporting...' : 'Export'}
+                </Body>
+              </TouchableOpacity>
+
+              {isSessionOpen && (
+                <TouchableOpacity
+                  style={styles.completeButton}
+                  onPress={handleCloseSession}
+                  activeOpacity={0.7}
+                >
+                  <IconSymbol name="lockClosed" size={18} color="white" />
+                  <Body style={styles.completeButtonLabel}>Complete</Body>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
         </View>
       )}
 
@@ -416,7 +631,6 @@ export default function SessionDetailScreen() {
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.pickerContent}>
-              {/* Raw Inventory Section */}
               {rawInventoryPresets.length > 0 && (
                 <View style={styles.pickerSection}>
                   <View style={styles.pickerSectionHeader}>
@@ -428,13 +642,20 @@ export default function SessionDetailScreen() {
                       key={preset.id}
                       preset={preset}
                       isSelected={selectedPresets.has(preset.id)}
-                      onToggle={() => togglePresetSelection(preset.id)}
+                      onToggle={() => {
+                        const next = new Set(selectedPresets);
+                        if (next.has(preset.id)) {
+                          next.delete(preset.id);
+                        } else {
+                          next.add(preset.id);
+                        }
+                        setSelectedPresets(next);
+                      }}
                     />
                   ))}
                 </View>
               )}
 
-              {/* Menu Items Section */}
               {menuItemPresets.length > 0 && (
                 <View style={styles.pickerSection}>
                   <View style={styles.pickerSectionHeader}>
@@ -446,7 +667,15 @@ export default function SessionDetailScreen() {
                       key={preset.id}
                       preset={preset}
                       isSelected={selectedPresets.has(preset.id)}
-                      onToggle={() => togglePresetSelection(preset.id)}
+                      onToggle={() => {
+                        const next = new Set(selectedPresets);
+                        if (next.has(preset.id)) {
+                          next.delete(preset.id);
+                        } else {
+                          next.add(preset.id);
+                        }
+                        setSelectedPresets(next);
+                      }}
                     />
                   ))}
                 </View>
@@ -459,20 +688,270 @@ export default function SessionDetailScreen() {
   );
 }
 
-// Item Card Component with Full-Width Inputs
+// ========== POS DATA STEP COMPONENT ==========
+
+interface POSDataStepProps {
+  salesEntries: Map<string, number>;
+  totalItemsSold: number;
+  totalMenuSales: number;
+  calculatedInventory: Record<string, number>;
+  onUpdateQuantity: (menuItemId: string, quantity: number) => void;
+  onAdjustQuantity: (menuItemId: string, delta: number) => void;
+  isEditable: boolean;
+}
+
+function POSDataStep({
+  salesEntries,
+  totalItemsSold,
+  totalMenuSales,
+  calculatedInventory,
+  onUpdateQuantity,
+  onAdjustQuantity,
+  isEditable,
+}: POSDataStepProps) {
+  return (
+    <View style={styles.posStepContainer}>
+      {/* Summary Card */}
+      <View style={styles.summaryCard}>
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryItem}>
+            <Caption color="textMuted">Items Sold</Caption>
+            <Title style={styles.summaryValue}>{totalItemsSold}</Title>
+          </View>
+          <View style={styles.summaryDivider} />
+          <View style={styles.summaryItem}>
+            <Caption color="textMuted">Total Sales</Caption>
+            <Title style={styles.summaryValuePrimary}>{formatCurrency(totalMenuSales)}</Title>
+          </View>
+        </View>
+      </View>
+
+      {/* Menu Items by Category */}
+      {MENU_CATEGORIES.map(category => {
+        const categoryItems = getMenuItemsByCategory(category.id);
+        const categoryTotal = categoryItems.reduce((sum, item) => {
+          return sum + (salesEntries.get(item.id) || 0);
+        }, 0);
+
+        if (categoryItems.length === 0) return null;
+
+        return (
+          <View key={category.id} style={styles.categorySection}>
+            <View style={styles.categoryHeader}>
+              <View style={styles.categoryIcon}>
+                <IconSymbol name={category.icon as any} size={16} color={Colors.primary} />
+              </View>
+              <Subtitle style={styles.categoryTitle}>{category.label}</Subtitle>
+              {categoryTotal > 0 && (
+                <View style={styles.categoryBadge}>
+                  <Caption style={styles.categoryBadgeText}>{categoryTotal}</Caption>
+                </View>
+              )}
+            </View>
+            
+            <View style={styles.categoryList}>
+              {categoryItems.map((menuItem, index) => {
+                const quantity = salesEntries.get(menuItem.id) || 0;
+                const isLast = index === categoryItems.length - 1;
+
+                return (
+                  <View
+                    key={menuItem.id}
+                    style={[
+                      styles.menuItemCard,
+                      !isLast && styles.menuItemBorder,
+                    ]}
+                  >
+                    <View style={styles.menuItemInfo}>
+                      <Body style={styles.menuItemName}>{menuItem.name}</Body>
+                      <Caption color="textMuted">{formatCurrency(menuItem.price)}</Caption>
+                    </View>
+                    
+                    <View style={styles.quantityControls}>
+                      <TouchableOpacity
+                        style={[
+                          styles.quantityButton,
+                          quantity === 0 && styles.quantityButtonDisabled,
+                        ]}
+                        onPress={() => onAdjustQuantity(menuItem.id, -1)}
+                        disabled={quantity === 0 || !isEditable}
+                        activeOpacity={0.7}
+                      >
+                        <IconSymbol 
+                          name="remove" 
+                          size={18} 
+                          color={quantity === 0 || !isEditable ? Colors.textMuted : Colors.textPrimary} 
+                        />
+                      </TouchableOpacity>
+                      
+                      <TextInput
+                        style={[
+                          styles.quantityInput,
+                          quantity > 0 && styles.quantityInputActive,
+                        ]}
+                        value={quantity > 0 ? quantity.toString() : ''}
+                        onChangeText={(text) => {
+                          const num = parseInt(text) || 0;
+                          onUpdateQuantity(menuItem.id, num);
+                        }}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor={Colors.textMuted}
+                        selectTextOnFocus
+                        editable={isEditable}
+                      />
+                      
+                      <TouchableOpacity
+                        style={styles.quantityButton}
+                        onPress={() => onAdjustQuantity(menuItem.id, 1)}
+                        disabled={!isEditable}
+                        activeOpacity={0.7}
+                      >
+                        <IconSymbol name="add" size={18} color={isEditable ? Colors.primary : Colors.textMuted} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        );
+      })}
+
+      {/* Calculated Inventory Preview */}
+      {totalItemsSold > 0 && (
+        <View style={styles.previewSection}>
+          <View style={styles.previewHeader}>
+            <IconSymbol name="calculator" size={16} color={Colors.primary} />
+            <Caption style={styles.previewTitle}>Calculated Raw Inventory</Caption>
+          </View>
+          <View style={styles.previewGrid}>
+            {RAW_INVENTORY_ITEMS.map(item => {
+              const qty = calculatedInventory[item.id] || 0;
+              if (qty === 0) return null;
+              return (
+                <View key={item.id} style={styles.previewItem}>
+                  <Caption color="textSecondary">{item.name}</Caption>
+                  <Body style={styles.previewQty}>{qty} {item.unit}</Body>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      <View style={{ height: 100 }} />
+    </View>
+  );
+}
+
+// ========== INVENTORY STEP COMPONENT ==========
+
+interface InventoryStepProps {
+  items: InventoryItem[];
+  presets: PresetItem[];
+  isNewStyleSession: boolean;
+  isSessionOpen: boolean;
+  getSoldOutValue: (item: InventoryItem) => number;
+  grandTotal: number;
+  posTotal: number;
+  onUpdateField: (itemId: string, field: string, value: string) => void;
+  onDeleteItem: (item: InventoryItem) => void;
+  onAddItem: () => void;
+}
+
+function InventoryStep({
+  items,
+  presets,
+  isNewStyleSession,
+  isSessionOpen,
+  getSoldOutValue,
+  grandTotal,
+  posTotal,
+  onUpdateField,
+  onDeleteItem,
+  onAddItem,
+}: InventoryStepProps) {
+  const rawInventoryPresets = presets.filter(p => p.category === 'raw_inventory');
+
+  return (
+    <View style={styles.inventoryStepContainer}>
+      {/* Add Bar for new-style sessions */}
+      {isSessionOpen && isNewStyleSession && (
+        <View style={styles.stickyAddBar}>
+          <TouchableOpacity
+            style={styles.stickyAddButton}
+            onPress={onAddItem}
+            activeOpacity={0.7}
+          >
+            <IconSymbol name="add" size={18} color={Colors.primary} />
+            <Body color="primary" style={{ fontWeight: '600', fontSize: FontSizes.sm }}>Add Item</Body>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {items.length === 0 ? (
+        <Card variant="outlined" style={styles.emptyCard}>
+          <CardContent style={styles.emptyContent}>
+            <IconSymbol name="inventory" size={40} color={Colors.textMuted} />
+            <Subtitle color="textMuted" style={styles.emptyTitle}>No items yet</Subtitle>
+            <Body color="textMuted" style={styles.emptyText}>
+              {isNewStyleSession 
+                ? 'Raw inventory items are auto-created for new sessions.'
+                : 'Tap "Add Item" to start tracking inventory'}
+            </Body>
+          </CardContent>
+        </Card>
+      ) : (
+        <View style={styles.itemsList}>
+          {items.map((item, index) => (
+            <ItemCard
+              key={item.id}
+              item={item}
+              index={index}
+              isEditable={isSessionOpen}
+              isNewStyleSession={isNewStyleSession}
+              calculatedSoldOut={getSoldOutValue(item)}
+              onUpdate={onUpdateField}
+              onDelete={() => onDeleteItem(item)}
+            />
+          ))}
+        </View>
+      )}
+
+      {/* Grand Total - Show POS Total (Revenue) */}
+      {items.length > 0 && (
+        <View style={styles.posTotalCard}>
+          <View style={styles.posTotalRow}>
+            <View style={styles.posTotalItem}>
+              <Caption color="textMuted">POS Sales (Revenue)</Caption>
+              <Title style={styles.posTotalValue}>{formatCurrency(posTotal)}</Title>
+            </View>
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ========== ITEM CARD COMPONENT ==========
+
 interface ItemCardProps {
   item: InventoryItem;
   index: number;
   isEditable: boolean;
+  isNewStyleSession: boolean;
+  calculatedSoldOut: number;
   onUpdate: (itemId: string, field: string, value: string) => void;
   onDelete: () => void;
 }
 
-function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps) {
-  // Calculate total from sold_out (only if numeric)
-  const soldOutVal = item.sold_out || '';
-  const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
-  const soldOut = isNumeric ? parseFloat(soldOutVal) : 0;
+function ItemCard({ item, index, isEditable, isNewStyleSession, calculatedSoldOut, onUpdate, onDelete }: ItemCardProps) {
+  const soldOut = isNewStyleSession ? calculatedSoldOut : (() => {
+    const soldOutVal = item.sold_out || '';
+    const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
+    return isNumeric ? parseFloat(soldOutVal) : 0;
+  })();
   const price = parseFloat(item.price?.toString() || '0');
   const total = soldOut * price;
 
@@ -483,7 +962,6 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
       delayLongPress={500}
     >
       <View style={styles.itemCard}>
-        {/* Header: Item Name & Price */}
         <View style={styles.itemCardHeader}>
           <View style={{ flex: 1 }}>
             <Body style={styles.itemCardName}>{item.item_name}</Body>
@@ -492,7 +970,7 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
             <Caption color="textMuted" style={styles.priceLabel}>PRICE</Caption>
             <Caption style={styles.priceValue}>{formatCurrency(price)}</Caption>
           </View>
-          {isEditable && (
+          {isEditable && !isNewStyleSession && (
             <TouchableOpacity 
               onPress={onDelete} 
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} 
@@ -503,9 +981,7 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
           )}
         </View>
 
-        {/* Simplified Input Form */}
         <View style={styles.inputGrid}>
-          {/* Starting Stock */}
           <View style={styles.formSection}>
             <View style={styles.formSectionHeader}>
               <View style={styles.stepNumber}>
@@ -523,7 +999,6 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
             </View>
           </View>
 
-          {/* Stock Changes */}
           <View style={styles.formSection}>
             <View style={styles.formSectionHeader}>
               <View style={styles.stepNumber}>
@@ -560,7 +1035,6 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
             </View>
           </View>
 
-          {/* Ending Count */}
           <View style={styles.formSection}>
             <View style={styles.formSectionHeader}>
               <View style={styles.stepNumber}>
@@ -578,31 +1052,44 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
             </View>
           </View>
 
-          {/* Sold Quantity - Most Important */}
           <View style={styles.soldSection}>
             <View style={styles.formSectionHeader}>
               <View style={[styles.stepNumber, styles.stepNumberPrimary]}>
                 <Caption style={styles.stepNumberTextWhite}>4</Caption>
               </View>
               <Body style={styles.formSectionTitlePrimary}>Sold Out</Body>
-              <View style={styles.calculationBadge}>
-                <Caption style={styles.calculationBadgeText}>Used for total</Caption>
-              </View>
+              {isNewStyleSession ? (
+                <View style={styles.calculatedBadge}>
+                  <IconSymbol name="calculator" size={12} color={Colors.primary} />
+                  <Caption style={styles.calculatedBadgeText}>From POS</Caption>
+                </View>
+              ) : (
+                <View style={styles.calculationBadge}>
+                  <Caption style={styles.calculationBadgeText}>Used for total</Caption>
+                </View>
+              )}
             </View>
             <View style={styles.inputField}>
-              <InlineTextInput
-                value={item.sold_out || ''}
-                onChangeValue={(val) => onUpdate(item.id, 'sold_out', val)}
-                editable={isEditable}
-                placeholder="-"
-                keyboardType="numeric"
-                emphasized
-              />
+              {isNewStyleSession ? (
+                <View style={styles.calculatedValue}>
+                  <Body style={styles.calculatedValueText}>
+                    {soldOut > 0 ? soldOut.toString() : '-'}
+                  </Body>
+                </View>
+              ) : (
+                <InlineTextInput
+                  value={item.sold_out || ''}
+                  onChangeValue={(val) => onUpdate(item.id, 'sold_out', val)}
+                  editable={isEditable}
+                  placeholder="-"
+                  keyboardType="numeric"
+                  emphasized
+                />
+              )}
             </View>
           </View>
         </View>
 
-        {/* Footer: Remarks & Total */}
         <View style={styles.itemCardFooter}>
           <View style={styles.remarksField}>
             <Caption color="textSecondary" style={styles.inputLabel}>REMARKS</Caption>
@@ -628,7 +1115,8 @@ function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps
   );
 }
 
-// Inline Text Input Component (Accepts both numbers and text)
+// ========== INLINE TEXT INPUT ==========
+
 interface InlineTextInputProps {
   value: string | null;
   onChangeValue: (value: string) => void;
@@ -650,10 +1138,8 @@ function InlineTextInput({
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState('');
   
-  // Normalize prop value (handle null, undefined, and string)
   const normalizedValue = value ?? '';
   
-  // Sync local state with prop value when not focused
   useEffect(() => {
     if (!isFocused) {
       setLocalValue(normalizedValue);
@@ -662,7 +1148,6 @@ function InlineTextInput({
 
   const handleFocus = () => {
     setIsFocused(true);
-    // Clear placeholder values when focusing
     if (localValue === '-' || localValue === '') {
       setLocalValue('');
     }
@@ -681,7 +1166,6 @@ function InlineTextInput({
     }
   };
 
-  // Display value: show dash for empty when not focused
   const displayValue = isFocused ? localValue : (localValue === '' ? '-' : localValue);
   
   if (!editable) {
@@ -704,7 +1188,8 @@ function InlineTextInput({
   );
 }
 
-// Preset Picker Item
+// ========== PRESET PICKER ITEM ==========
+
 interface PresetPickerItemProps {
   preset: PresetItem;
   isSelected: boolean;
@@ -731,6 +1216,8 @@ function PresetPickerItem({ preset, isSelected, onToggle }: PresetPickerItemProp
   );
 }
 
+// ========== STYLES ==========
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -748,11 +1235,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     backgroundColor: Colors.surface,
-    shadowColor: Colors.shadowColor,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Shadows.small,
   },
   backButton: {
     width: 40,
@@ -770,22 +1253,248 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
+  stepIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.xl,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  stepItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  stepItemActive: {},
+  stepCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepCircleActive: {
+    backgroundColor: Colors.primary,
+  },
+  stepCircleCompleted: {
+    backgroundColor: Colors.success,
+  },
+  stepCircleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textMuted,
+  },
+  stepCircleTextActive: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'white',
+  },
+  stepLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: Colors.textMuted,
+  },
+  stepLabelActive: {
+    color: Colors.primary,
+    fontWeight: '600',
+  },
+  stepLine: {
+    flex: 1,
+    height: 2,
+    marginHorizontal: Spacing.sm,
+    marginBottom: 16,
+  },
+  stepLineInner: {
+    height: 2,
+    backgroundColor: Colors.borderLight,
+  },
+  stepLineCompleted: {
+    backgroundColor: Colors.success,
+  },
   content: {
     padding: Spacing.md,
     paddingBottom: 180,
   },
-  // Sticky Add Bar
+  
+  // POS Step Styles
+  posStepContainer: {
+    gap: Spacing.md,
+  },
+  summaryCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    ...Shadows.small,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: Colors.borderLight,
+  },
+  summaryValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+    marginTop: 4,
+  },
+  summaryValuePrimary: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.primary,
+    marginTop: 4,
+  },
+  categorySection: {
+    marginBottom: Spacing.sm,
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xs,
+    paddingHorizontal: Spacing.xs,
+  },
+  categoryIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    backgroundColor: Colors.primary + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryTitle: {
+    flex: 1,
+    fontWeight: '600',
+    fontSize: FontSizes.sm,
+  },
+  categoryBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  categoryBadgeText: {
+    color: 'white',
+    fontWeight: '600',
+    fontSize: 11,
+  },
+  categoryList: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    ...Shadows.small,
+  },
+  menuItemCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: Spacing.md,
+  },
+  menuItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+  },
+  menuItemInfo: {
+    flex: 1,
+    marginRight: Spacing.md,
+  },
+  menuItemName: {
+    fontWeight: '500',
+    color: Colors.textPrimary,
+    marginBottom: 2,
+  },
+  quantityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  quantityButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quantityButtonDisabled: {
+    opacity: 0.5,
+  },
+  quantityInput: {
+    width: 56,
+    height: 40,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    textAlign: 'center',
+    fontSize: FontSizes.base,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  quantityInputActive: {
+    backgroundColor: Colors.primary + '10',
+    borderColor: Colors.primary,
+  },
+  previewSection: {
+    backgroundColor: Colors.primary + '08',
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.primary + '20',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  previewTitle: {
+    color: Colors.primary,
+    fontWeight: '600',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  previewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  previewItem: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
+    minWidth: 80,
+  },
+  previewQty: {
+    fontWeight: '600',
+    color: Colors.textPrimary,
+    fontSize: FontSizes.sm,
+  },
+
+  // Inventory Step Styles
+  inventoryStepContainer: {
+    gap: Spacing.md,
+  },
   stickyAddBar: {
     backgroundColor: Colors.surface,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
-    shadowColor: Colors.shadowColor,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Shadows.small,
   },
   stickyAddButton: {
     flexDirection: 'row',
@@ -814,7 +1523,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     textAlign: 'center',
   },
-  // Item Card Styles
   itemsList: {
     gap: Spacing.md,
   },
@@ -822,11 +1530,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     padding: Spacing.md,
-    shadowColor: Colors.shadowColor,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 2,
+    ...Shadows.small,
   },
   itemCardHeader: {
     flexDirection: 'row',
@@ -871,11 +1575,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: Spacing.xs,
-    shadowColor: Colors.error,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 3,
   },
   inputGrid: {
     gap: Spacing.md,
@@ -962,21 +1661,37 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: 'white',
   },
-  inputRow: {
+  calculatedBadge: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  calculatedBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  calculatedValue: {
+    backgroundColor: Colors.primary + '15',
+    borderRadius: BorderRadius.sm,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: 2,
+    borderColor: Colors.primary + '30',
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  calculatedValueText: {
+    fontSize: FontSizes.base,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   inputField: {
     flex: 1,
-  },
-  soldOutField: {
-    flex: 1,
-  },
-  inputLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    marginBottom: 4,
-    letterSpacing: 0.5,
   },
   textInput: {
     fontSize: FontSizes.base,
@@ -1019,6 +1734,12 @@ const styles = StyleSheet.create({
   remarksField: {
     flex: 2,
   },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
   remarksInput: {
     fontSize: FontSizes.sm,
     color: Colors.textSecondary,
@@ -1041,7 +1762,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textAlign: 'center',
   },
-  // Compact Bottom Section
+
+  // Bottom Section
   bottomSection: {
     backgroundColor: Colors.surface,
     paddingHorizontal: Spacing.md,
@@ -1049,52 +1771,44 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
-    shadowColor: Colors.shadowColor,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-    gap: Spacing.sm,
+    ...Shadows.medium,
   },
-  grandTotalCard: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.md,
-    padding: Spacing.sm,
+  nextButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  grandTotalIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.25)',
-    alignItems: 'center',
     justifyContent: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    ...Shadows.small,
   },
-  grandTotalInfo: {
-    flex: 1,
+  nextButtonDisabled: {
+    opacity: 0.6,
   },
-  grandTotalLabel: {
-    fontSize: 11,
+  nextButtonText: {
+    color: 'white',
     fontWeight: '600',
-    color: 'white',
-    opacity: 0.85,
-  },
-  grandTotalAmount: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: 'white',
+    fontSize: FontSizes.base,
   },
   actionButtonsRow: {
+    flexDirection: 'row',
     gap: Spacing.sm,
   },
+  backButtonPos: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    backgroundColor: Colors.surface,
+  },
   exportButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1120,18 +1834,63 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
     gap: Spacing.xs,
-    shadowColor: Colors.success,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
   },
   completeButtonLabel: {
     fontSize: FontSizes.sm,
     fontWeight: '600',
     color: 'white',
   },
-  // Modal styles
+  grandTotalCard: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  grandTotalIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  grandTotalInfo: {
+    flex: 1,
+  },
+  grandTotalLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'white',
+    opacity: 0.85,
+  },
+  grandTotalAmount: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: 'white',
+  },
+  posTotalCard: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  posTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  posTotalItem: {
+    alignItems: 'center',
+  },
+  posTotalValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: 'white',
+    marginTop: 4,
+  },
+
+  // Modal Styles
   modalContainer: {
     flex: 1,
     backgroundColor: Colors.background,

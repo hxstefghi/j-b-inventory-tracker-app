@@ -41,6 +41,15 @@ const ICONS = {
   help: 'help-outline' as IconName,
   trash: 'delete' as IconName,
   lockClosed: 'lock' as IconName,
+  receipt: 'receipt' as IconName,
+  calculator: 'calculate' as IconName,
+  info: 'info-outline' as IconName,
+  arrowForward: 'arrow-forward' as IconName,
+  arrowBack: 'arrow-back' as IconName,
+  addCircle: 'add-circle' as IconName,
+  localCafe: 'local-cafe' as IconName,
+  localFireDepartment: 'local-fire-department' as IconName,
+  star: 'star' as IconName,
 } as const;
 
 export type IconKey = keyof typeof ICONS;
