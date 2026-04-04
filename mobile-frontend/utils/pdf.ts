@@ -242,7 +242,7 @@ function generatePDFHTML(
         }
         
         .price-cell {
-          text-align: right;
+          text-align: center;
           color: #666666;
           font-size: 11px;
         }
@@ -278,7 +278,7 @@ function generatePDFHTML(
         }
         
         .grand-total-value {
-          font-size: 28px;
+          font-size: 20px;
           font-weight: 700;
           color: white;
         }

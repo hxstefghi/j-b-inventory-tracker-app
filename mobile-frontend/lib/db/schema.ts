@@ -40,13 +40,13 @@ export const inventoryItems = pgTable('inventory_items', {
   sessionId: uuid('session_id').notNull(),
   itemName: text('item_name').notNull(),
   unit: text('unit'),
-  begBalance: numeric('beg_balance').default('0'),
-  delivery: numeric('delivery').default('0'),
-  pullOut: numeric('pull_out').default('0'),
-  soldOut: numeric('sold_out').default('0'),
+  begBalance: text('beg_balance'), // Changed to TEXT to accept strings like "N/A", "broken"
+  delivery: text('delivery'),      // Changed to TEXT
+  pullOut: text('pull_out'),       // Changed to TEXT
+  soldOut: text('sold_out'),       // Changed to TEXT (but used for computation if numeric)
   price: numeric('price').default('0'),
-  ending: numeric('ending'),
-  total: numeric('total'),
+  ending: text('ending'),          // Changed to TEXT, no longer auto-computed
+  total: numeric('total'),         // Computed: sold_out * price (if sold_out is numeric)
   remarks: text('remarks'),
   sortOrder: integer('sort_order').default(0),
   createdAt: timestamp('created_at').defaultNow(),
@@ -107,13 +107,13 @@ export interface InventoryItem {
   session_id: string;
   item_name: string;
   unit: string | null;
-  beg_balance: string;
-  delivery: string;
-  pull_out: string;
-  sold_out: string;
-  price: string;
-  ending: string | null;
-  total: string | null;
+  beg_balance: string | null; // Can be number or text like "N/A", "broken"
+  delivery: string | null;     // Can be number or text
+  pull_out: string | null;     // Can be number or text
+  sold_out: string | null;     // Can be number or text (used for computation if numeric)
+  price: string;               // Always numeric
+  ending: string | null;       // Can be number or text, no longer auto-computed
+  total: string | null;        // Computed from sold_out * price
   remarks: string | null;
   sort_order: number;
   created_at: string;
@@ -124,12 +124,12 @@ export interface NewInventoryItem {
   session_id: string;
   item_name: string;
   unit?: string;
-  beg_balance?: string;
-  delivery?: string;
-  pull_out?: string;
-  sold_out?: string;
+  beg_balance?: string | null; // Can be number or text
+  delivery?: string | null;     // Can be number or text
+  pull_out?: string | null;     // Can be number or text
+  sold_out?: string | null;     // Can be number or text
   price?: string;
-  ending?: string;
+  ending?: string | null;       // Can be number or text
   remarks?: string;
   sort_order?: number;
 }

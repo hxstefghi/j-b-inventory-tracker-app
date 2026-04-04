@@ -3,9 +3,10 @@
  * 
  * Core feature where mom:
  * 1. Adds items from saved presets
- * 2. Manually enters: Beg. Balance, Delivery, Pull Out, Ending, Sold Out
- * 3. App auto-computes: Total = Sold Out × Price
- * 4. Exports to PDF
+ * 2. Manually enters: Beg. Balance, Delivery, Pull Out, Ending (can be numbers OR text like "N/A", "broken")
+ * 3. Manually enters: Sold Out (numbers only, used for computation)
+ * 4. App auto-computes: Total = Sold Out × Price (only if Sold Out is numeric)
+ * 5. Exports to PDF
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
@@ -92,10 +93,12 @@ export default function SessionDetailScreen() {
     loadData();
   }, [loadData]);
 
-  // Calculate grand total
+  // Calculate grand total (only from sold_out if it's numeric)
   const grandTotal = items.reduce((sum, item) => {
     const soldOutVal = item.sold_out || '';
-    const soldOut = soldOutVal === '' ? 0 : parseFloat(soldOutVal);
+    // Check if sold_out is numeric
+    const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
+    const soldOut = isNumeric ? parseFloat(soldOutVal) : 0;
     const price = parseFloat(item.price?.toString() || '0');
     return sum + (soldOut * price);
   }, 0);
@@ -106,11 +109,11 @@ export default function SessionDetailScreen() {
     field: string,
     value: string
   ) => {
-    // Skip generated columns (ending and total are computed by DB)
-    if (field === 'ending' || field === 'total') return;
+    // Skip generated column (total is computed by DB)
+    if (field === 'total') return;
     
     try {
-      // Convert empty strings to null for PostgreSQL numeric columns
+      // Convert empty strings to null for PostgreSQL
       const dbValue = value === '' ? null : value;
       await updateItem(itemId, { [field]: dbValue });
       
@@ -289,24 +292,26 @@ export default function SessionDetailScreen() {
         </View>
       </View>
 
+      {/* Sticky Add Item Bar */}
+      {isSessionOpen && (
+        <View style={styles.stickyAddBar}>
+          <TouchableOpacity
+            style={styles.stickyAddButton}
+            onPress={() => setPickerVisible(true)}
+            activeOpacity={0.7}
+          >
+            <IconSymbol name="add" size={18} color={Colors.primary} />
+            <Body color="primary" style={{ fontWeight: '600', fontSize: FontSizes.sm }}>Add Item</Body>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView contentContainerStyle={styles.content}>
-          {/* Add Item Button */}
-          {isSessionOpen && (
-            <TouchableOpacity
-              style={styles.addItemButton}
-              onPress={() => setPickerVisible(true)}
-              activeOpacity={0.7}
-            >
-              <IconSymbol name="add" size={20} color={Colors.primary} />
-              <Body color="primary" style={{ fontWeight: '500' }}>Add Item from Presets</Body>
-            </TouchableOpacity>
-          )}
-
-          {/* Items Table */}
+          {/* Items List */}
           {items.length === 0 ? (
             <Card variant="outlined" style={styles.emptyCard}>
               <CardContent style={styles.emptyContent}>
@@ -318,32 +323,9 @@ export default function SessionDetailScreen() {
               </CardContent>
             </Card>
           ) : (
-            <View style={styles.tableContainer}>
-              {/* Table Header */}
-              <View style={styles.tableHeader}>
-                <View style={[styles.tableCell, styles.itemCell]}>
-                  <Caption color="textSecondary" style={styles.headerText}>ITEM</Caption>
-                </View>
-                <View style={[styles.tableCell, styles.numericCell]}>
-                  <Caption color="textSecondary" style={styles.headerText}>BEG</Caption>
-                </View>
-                <View style={[styles.tableCell, styles.numericCell]}>
-                  <Caption color="textSecondary" style={styles.headerText}>DEL</Caption>
-                </View>
-                <View style={[styles.tableCell, styles.numericCell]}>
-                  <Caption color="textSecondary" style={styles.headerText}>PULL</Caption>
-                </View>
-                <View style={[styles.tableCell, styles.numericCell]}>
-                  <Caption color="textSecondary" style={styles.headerText}>END</Caption>
-                </View>
-                <View style={[styles.tableCell, styles.numericCell]}>
-                  <Caption color="textSecondary" style={styles.headerText}>SOLD</Caption>
-                </View>
-              </View>
-
-              {/* Table Rows */}
+            <View style={styles.itemsList}>
               {items.map((item, index) => (
-                <TableRow
+                <ItemCard
                   key={item.id}
                   item={item}
                   index={index}
@@ -352,40 +334,58 @@ export default function SessionDetailScreen() {
                   onDelete={() => handleDeleteItem(item)}
                 />
               ))}
-
-              {/* Grand Total */}
-              <View style={styles.grandTotalRow}>
-                <Body style={styles.grandTotalLabel}>GRAND TOTAL</Body>
-                <Title style={styles.grandTotalValue}>{formatCurrency(grandTotal)}</Title>
-              </View>
             </View>
           )}
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <Button
-              variant="secondary"
-              fullWidth
-              loading={exporting}
-              onPress={handleExportPDF}
-              icon={<IconSymbol name="pdfExport" size={20} color={Colors.primary} />}
-              disabled={items.length === 0}
-            >
-              Export PDF
-            </Button>
-
-            {isSessionOpen && (
-              <Button
-                variant="ghost"
-                fullWidth
-                onPress={handleCloseSession}
-              >
-                Close Session
-              </Button>
-            )}
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Compact Bottom Section: Grand Total + Action Buttons */}
+      {items.length > 0 && (
+        <View style={styles.bottomSection}>
+          {/* Compact Grand Total */}
+          <View style={styles.grandTotalCard}>
+            <View style={styles.grandTotalIcon}>
+              <IconSymbol name="attachMoney" size={20} color="white" />
+            </View>
+            <View style={styles.grandTotalInfo}>
+              <Caption style={styles.grandTotalLabel}>Total Sales</Caption>
+              <Title style={styles.grandTotalAmount}>{formatCurrency(grandTotal)}</Title>
+            </View>
+          </View>
+
+          {/* Compact Action Buttons */}
+          <View style={styles.actionButtonsRow}>
+            {/* Export to PDF Button */}
+            <TouchableOpacity
+              style={styles.exportButton}
+              onPress={handleExportPDF}
+              disabled={exporting || items.length === 0}
+              activeOpacity={0.7}
+            >
+              <IconSymbol 
+                name="pdfExport" 
+                size={18} 
+                color={exporting ? Colors.textMuted : Colors.primary} 
+              />
+              <Body style={styles.exportButtonLabel}>
+                {exporting ? 'Exporting...' : 'Export to PDF'}
+              </Body>
+            </TouchableOpacity>
+
+            {/* Complete Session Button */}
+            {isSessionOpen && (
+              <TouchableOpacity
+                style={styles.completeButton}
+                onPress={handleCloseSession}
+                activeOpacity={0.7}
+              >
+                <IconSymbol name="lockClosed" size={18} color="white" />
+                <Body style={styles.completeButtonLabel}>Complete Session</Body>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
 
       {/* Preset Picker Modal */}
       <Modal
@@ -459,8 +459,8 @@ export default function SessionDetailScreen() {
   );
 }
 
-// Table Row Component with Inline Editing
-interface TableRowProps {
+// Item Card Component with Full-Width Inputs
+interface ItemCardProps {
   item: InventoryItem;
   index: number;
   isEditable: boolean;
@@ -468,11 +468,12 @@ interface TableRowProps {
   onDelete: () => void;
 }
 
-function TableRow({ item, index, isEditable, onUpdate, onDelete }: TableRowProps) {
-  // Allow null values - use '-' if empty/null
+function ItemCard({ item, index, isEditable, onUpdate, onDelete }: ItemCardProps) {
+  // Calculate total from sold_out (only if numeric)
   const soldOutVal = item.sold_out || '';
+  const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
+  const soldOut = isNumeric ? parseFloat(soldOutVal) : 0;
   const price = parseFloat(item.price?.toString() || '0');
-  const soldOut = soldOutVal === '' ? 0 : parseFloat(soldOutVal);
   const total = soldOut * price;
 
   return (
@@ -481,91 +482,170 @@ function TableRow({ item, index, isEditable, onUpdate, onDelete }: TableRowProps
       activeOpacity={1}
       delayLongPress={500}
     >
-      <View style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
-        {/* Item Name & Price */}
-        <View style={[styles.tableCell, styles.itemCell]}>
-          <Body style={styles.itemName} numberOfLines={2}>{item.item_name}</Body>
-          <Caption color="textMuted">{formatCurrency(price)}</Caption>
-        </View>
-
-        {/* Beg Balance */}
-        <View style={[styles.tableCell, styles.numericCell]}>
-          <InlineNumberInput
-            value={item.beg_balance || ''}
-            onChangeValue={(val) => onUpdate(item.id, 'beg_balance', val)}
-            editable={isEditable}
-          />
-        </View>
-
-        {/* Delivery */}
-        <View style={[styles.tableCell, styles.numericCell]}>
-          <InlineNumberInput
-            value={item.delivery || ''}
-            onChangeValue={(val) => onUpdate(item.id, 'delivery', val)}
-            editable={isEditable}
-          />
-        </View>
-
-        {/* Pull Out */}
-        <View style={[styles.tableCell, styles.numericCell]}>
-          <InlineNumberInput
-            value={item.pull_out || ''}
-            onChangeValue={(val) => onUpdate(item.id, 'pull_out', val)}
-            editable={isEditable}
-          />
-        </View>
-
-        {/* Ending */}
-        <View style={[styles.tableCell, styles.numericCell]}>
-          <InlineNumberInput
-            value={item.ending || ''}
-            onChangeValue={(val) => onUpdate(item.id, 'ending', val)}
-            editable={isEditable}
-          />
-        </View>
-
-        {/* Sold Out */}
-        <View style={[styles.tableCell, styles.numericCell]}>
-          <InlineNumberInput
-            value={item.sold_out || ''}
-            onChangeValue={(val) => onUpdate(item.id, 'sold_out', val)}
-            editable={isEditable}
-          />
-        </View>
-      </View>
-
-      {/* Row Footer - Total & Remarks */}
-      <View style={[styles.rowFooter, index % 2 === 1 && styles.tableRowAlt]}>
-        <View style={styles.remarksContainer}>
-          {isEditable ? (
-            <TextInput
-              style={styles.remarksInput}
-              value={item.remarks || ''}
-              onChangeText={(val) => onUpdate(item.id, 'remarks', val)}
-              placeholder="Remarks..."
-              placeholderTextColor={Colors.textMuted}
-            />
-          ) : (
-            <Caption color="textMuted">{item.remarks || '-'}</Caption>
+      <View style={styles.itemCard}>
+        {/* Header: Item Name & Price */}
+        <View style={styles.itemCardHeader}>
+          <View style={{ flex: 1 }}>
+            <Body style={styles.itemCardName}>{item.item_name}</Body>
+          </View>
+          <View style={styles.priceBadge}>
+            <Caption color="textMuted" style={styles.priceLabel}>PRICE</Caption>
+            <Caption style={styles.priceValue}>{formatCurrency(price)}</Caption>
+          </View>
+          {isEditable && (
+            <TouchableOpacity 
+              onPress={onDelete} 
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} 
+              style={styles.deleteButton}
+            >
+              <IconSymbol name="trash" size={18} color="white" />
+            </TouchableOpacity>
           )}
         </View>
-        <View style={styles.totalContainer}>
-          <Caption color="textSecondary">Total:</Caption>
-          <Body style={styles.totalValue}>{formatCurrency(total)}</Body>
+
+        {/* Simplified Input Form */}
+        <View style={styles.inputGrid}>
+          {/* Starting Stock */}
+          <View style={styles.formSection}>
+            <View style={styles.formSectionHeader}>
+              <View style={styles.stepNumber}>
+                <Caption style={styles.stepNumberText}>1</Caption>
+              </View>
+              <Body style={styles.formSectionTitle}>Beginning Balance</Body>
+            </View>
+            <View style={styles.inputField}>
+              <InlineTextInput
+                value={item.beg_balance || ''}
+                onChangeValue={(val) => onUpdate(item.id, 'beg_balance', val)}
+                editable={isEditable}
+                placeholder="-"
+              />
+            </View>
+          </View>
+
+          {/* Stock Changes */}
+          <View style={styles.formSection}>
+            <View style={styles.formSectionHeader}>
+              <View style={styles.stepNumber}>
+                <Caption style={styles.stepNumberText}>2</Caption>
+              </View>
+              <Body style={styles.formSectionTitle}>Stock Changes</Body>
+              <Caption color="textMuted" style={styles.optionalTag}>(Optional)</Caption>
+            </View>
+            <View style={styles.stockChangesRow}>
+              <View style={styles.stockChangeItem}>
+                <View style={styles.stockChangeHeader}>
+                  <IconSymbol name="add" size={16} color={Colors.success} />
+                  <Caption color="success" style={styles.stockChangeLabel}>Delivery</Caption>
+                </View>
+                <InlineTextInput
+                  value={item.delivery || ''}
+                  onChangeValue={(val) => onUpdate(item.id, 'delivery', val)}
+                  editable={isEditable}
+                  placeholder="-"
+                />
+              </View>
+              <View style={styles.stockChangeItem}>
+                <View style={styles.stockChangeHeader}>
+                  <IconSymbol name="remove" size={16} color={Colors.error} />
+                  <Caption color="error" style={styles.stockChangeLabel}>Pull Out</Caption>
+                </View>
+                <InlineTextInput
+                  value={item.pull_out || ''}
+                  onChangeValue={(val) => onUpdate(item.id, 'pull_out', val)}
+                  editable={isEditable}
+                  placeholder="-"
+                />
+              </View>
+            </View>
+          </View>
+
+          {/* Ending Count */}
+          <View style={styles.formSection}>
+            <View style={styles.formSectionHeader}>
+              <View style={styles.stepNumber}>
+                <Caption style={styles.stepNumberText}>3</Caption>
+              </View>
+              <Body style={styles.formSectionTitle}>Ending</Body>
+            </View>
+            <View style={styles.inputField}>
+              <InlineTextInput
+                value={item.ending || ''}
+                onChangeValue={(val) => onUpdate(item.id, 'ending', val)}
+                editable={isEditable}
+                placeholder="-"
+              />
+            </View>
+          </View>
+
+          {/* Sold Quantity - Most Important */}
+          <View style={styles.soldSection}>
+            <View style={styles.formSectionHeader}>
+              <View style={[styles.stepNumber, styles.stepNumberPrimary]}>
+                <Caption style={styles.stepNumberTextWhite}>4</Caption>
+              </View>
+              <Body style={styles.formSectionTitlePrimary}>Sold Out</Body>
+              <View style={styles.calculationBadge}>
+                <Caption style={styles.calculationBadgeText}>Used for total</Caption>
+              </View>
+            </View>
+            <View style={styles.inputField}>
+              <InlineTextInput
+                value={item.sold_out || ''}
+                onChangeValue={(val) => onUpdate(item.id, 'sold_out', val)}
+                editable={isEditable}
+                placeholder="-"
+                keyboardType="numeric"
+                emphasized
+              />
+            </View>
+          </View>
+        </View>
+
+        {/* Footer: Remarks & Total */}
+        <View style={styles.itemCardFooter}>
+          <View style={styles.remarksField}>
+            <Caption color="textSecondary" style={styles.inputLabel}>REMARKS</Caption>
+            {isEditable ? (
+              <TextInput
+                style={styles.remarksInput}
+                value={item.remarks || ''}
+                onChangeText={(val) => onUpdate(item.id, 'remarks', val)}
+                placeholder="Optional notes..."
+                placeholderTextColor={Colors.textMuted}
+              />
+            ) : (
+              <Caption color="textMuted">{item.remarks || '-'}</Caption>
+            )}
+          </View>
+          <View style={styles.totalField}>
+            <Caption color="textSecondary" style={styles.inputLabel}>TOTAL</Caption>
+            <Body style={styles.totalValue}>{formatCurrency(total)}</Body>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
   );
 }
 
-// Inline Number Input Component
-interface InlineNumberInputProps {
+// Inline Text Input Component (Accepts both numbers and text)
+interface InlineTextInputProps {
   value: string | null;
   onChangeValue: (value: string) => void;
   editable: boolean;
+  placeholder?: string;
+  keyboardType?: 'default' | 'numeric';
+  emphasized?: boolean;
 }
 
-function InlineNumberInput({ value, onChangeValue, editable }: InlineNumberInputProps) {
+function InlineTextInput({ 
+  value, 
+  onChangeValue, 
+  editable, 
+  placeholder = '-',
+  keyboardType = 'default',
+  emphasized = false
+}: InlineTextInputProps) {
   const inputRef = useRef<TextInput>(null);
   const [isFocused, setIsFocused] = useState(false);
   const [localValue, setLocalValue] = useState('');
@@ -573,9 +653,7 @@ function InlineNumberInput({ value, onChangeValue, editable }: InlineNumberInput
   // Normalize prop value (handle null, undefined, and string)
   const normalizedValue = value ?? '';
   
-  // Sync local state with prop value when:
-  // 1. Not focused (don't overwrite user input)
-  // 2. Prop value changes
+  // Sync local state with prop value when not focused
   useEffect(() => {
     if (!isFocused) {
       setLocalValue(normalizedValue);
@@ -584,7 +662,7 @@ function InlineNumberInput({ value, onChangeValue, editable }: InlineNumberInput
 
   const handleFocus = () => {
     setIsFocused(true);
-    // Clear the dash when focusing for easier editing
+    // Clear placeholder values when focusing
     if (localValue === '-' || localValue === '') {
       setLocalValue('');
     }
@@ -598,9 +676,8 @@ function InlineNumberInput({ value, onChangeValue, editable }: InlineNumberInput
       setLocalValue('');
       onChangeValue('');
     } else {
-      const numValue = cleaned.replace(/[^0-9.]/g, '');
-      setLocalValue(numValue);
-      onChangeValue(numValue);
+      setLocalValue(cleaned);
+      onChangeValue(cleaned);
     }
   };
 
@@ -608,20 +685,20 @@ function InlineNumberInput({ value, onChangeValue, editable }: InlineNumberInput
   const displayValue = isFocused ? localValue : (localValue === '' ? '-' : localValue);
   
   if (!editable) {
-    return <Body style={styles.numericValue}>{normalizedValue === '' ? '-' : normalizedValue}</Body>;
+    return <Body style={styles.displayValue}>{normalizedValue === '' ? '-' : normalizedValue}</Body>;
   }
 
   return (
     <TextInput
       ref={inputRef}
-      style={styles.inlineInput}
+      style={[styles.textInput, emphasized && styles.textInputEmphasized]}
       value={displayValue}
       onChangeText={setLocalValue}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      keyboardType="numeric"
+      keyboardType={keyboardType}
       selectTextOnFocus
-      placeholder="-"
+      placeholder={placeholder}
       placeholderTextColor={Colors.textMuted}
     />
   );
@@ -671,7 +748,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.md,
     backgroundColor: Colors.surface,
-    ...Shadows.small,
+    shadowColor: Colors.shadowColor,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
   backButton: {
     width: 40,
@@ -691,19 +772,32 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.md,
-    paddingBottom: Spacing.xxl,
+    paddingBottom: 180,
   },
-  addItemButton: {
+  // Sticky Add Bar
+  stickyAddBar: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.borderLight,
+    shadowColor: Colors.shadowColor,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  stickyAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
     borderWidth: 2,
     borderColor: Colors.primary,
     borderStyle: 'dashed',
-    marginBottom: Spacing.md,
     backgroundColor: Colors.primary + '05',
   },
   emptyCard: {
@@ -720,114 +814,322 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     textAlign: 'center',
   },
-  tableContainer: {
-    borderRadius: BorderRadius.lg,
+  // Item Card Styles
+  itemsList: {
+    gap: Spacing.md,
+  },
+  itemCard: {
     backgroundColor: Colors.surface,
-    overflow: 'hidden',
-    marginBottom: Spacing.md,
-    ...Shadows.small,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    shadowColor: Colors.shadowColor,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 2,
   },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: Colors.primary,
-    paddingVertical: Spacing.sm,
-  },
-  tableRow: {
-    flexDirection: 'row',
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.borderLight,
-    paddingVertical: Spacing.sm,
-  },
-  tableRowAlt: {
-    backgroundColor: Colors.tableRowAlt,
-  },
-  tableCell: {
-    paddingHorizontal: Spacing.xs,
-    justifyContent: 'center',
-  },
-  headerText: {
-    fontSize: 10,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: Colors.primaryForeground,
-  },
-  itemCell: {
-    flex: 2,
-    paddingLeft: Spacing.sm,
-  },
-  numericCell: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  itemName: {
-    fontSize: FontSizes.sm,
-    fontWeight: '600',
-    lineHeight: 18,
-    color: Colors.textPrimary,
-  },
-  numericValue: {
-    fontSize: FontSizes.sm,
-    fontFamily: FontFamilies.regular,
-    textAlign: 'center',
-    color: Colors.textPrimary,
-  },
-  inlineInput: {
-    fontSize: FontSizes.sm,
-    fontFamily: FontFamilies.regular,
-    textAlign: 'center',
-    color: Colors.textPrimary,
-    paddingVertical: 4,
-    paddingHorizontal: 6,
-    minWidth: 40,
-    backgroundColor: Colors.borderLight,
-    borderRadius: 4,
-  },
-  rowFooter: {
+  itemCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.sm,
+    marginBottom: Spacing.md,
     paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: Colors.borderLight,
   },
-  remarksContainer: {
-    flex: 1,
+  itemCardName: {
+    fontSize: FontSizes.base,
+    fontWeight: '600',
+    color: Colors.textPrimary,
   },
-  remarksInput: {
+  priceBadge: {
+    alignItems: 'center',
+    backgroundColor: Colors.background,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  priceLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    letterSpacing: 0.5,
+    marginBottom: 1,
+  },
+  priceValue: {
     fontSize: FontSizes.xs,
-    color: Colors.textSecondary,
-    padding: 0,
+    fontWeight: '600',
+    color: Colors.textPrimary,
   },
-  totalContainer: {
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.error,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: Spacing.xs,
+    shadowColor: Colors.error,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  inputGrid: {
+    gap: Spacing.md,
+  },
+  formSection: {
+    gap: Spacing.sm,
+  },
+  formSectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  formSectionTitle: {
+    fontSize: FontSizes.base,
+    fontWeight: '600',
+    color: Colors.textPrimary,
+  },
+  formSectionTitlePrimary: {
+    fontSize: FontSizes.base,
+    fontWeight: '700',
+    color: Colors.primary,
+  },
+  stepNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.background,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepNumberPrimary: {
+    backgroundColor: Colors.primary,
+    borderColor: Colors.primary,
+  },
+  stepNumberText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  stepNumberTextWhite: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'white',
+  },
+  optionalTag: {
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  stockChangesRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  stockChangeItem: {
+    flex: 1,
     gap: Spacing.xs,
+  },
+  stockChangeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  stockChangeLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  soldSection: {
+    gap: Spacing.sm,
+    padding: Spacing.md,
+    backgroundColor: Colors.primary + '08',
+    borderRadius: BorderRadius.lg,
+    borderWidth: 2,
+    borderColor: Colors.primary + '30',
+  },
+  calculationBadge: {
+    backgroundColor: Colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  calculationBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: 'white',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  inputField: {
+    flex: 1,
+  },
+  soldOutField: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    marginBottom: 4,
+    letterSpacing: 0.5,
+  },
+  textInput: {
+    fontSize: FontSizes.base,
+    fontFamily: FontFamilies.regular,
+    color: Colors.textPrimary,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 44,
+  },
+  textInputEmphasized: {
+    backgroundColor: Colors.primary + '08',
+    borderColor: Colors.primary,
+    borderWidth: 2,
+    fontWeight: '600',
+  },
+  displayValue: {
+    fontSize: FontSizes.base,
+    fontFamily: FontFamilies.regular,
+    color: Colors.textPrimary,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    minHeight: 44,
+  },
+  itemCardFooter: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  remarksField: {
+    flex: 2,
+  },
+  remarksInput: {
+    fontSize: FontSizes.sm,
+    color: Colors.textSecondary,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    minHeight: 40,
+  },
+  totalField: {
+    flex: 1,
+    alignItems: 'center',
   },
   totalValue: {
     fontWeight: '700',
     color: Colors.primary,
+    fontSize: FontSizes.lg,
+    marginTop: 4,
+    textAlign: 'center',
   },
-  grandTotalRow: {
+  // Compact Bottom Section
+  bottomSection: {
+    backgroundColor: Colors.surface,
+    paddingHorizontal: Spacing.md,
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+    shadowColor: Colors.shadowColor,
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    gap: Spacing.sm,
+  },
+  grandTotalCard: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.md,
-    backgroundColor: Colors.primary + '08',
+    gap: Spacing.sm,
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  grandTotalIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  grandTotalInfo: {
+    flex: 1,
   },
   grandTotalLabel: {
+    fontSize: 11,
     fontWeight: '600',
-    color: Colors.textSecondary,
-    fontSize: 13,
+    color: 'white',
+    opacity: 0.85,
   },
-  grandTotalValue: {
-    color: Colors.primary,
+  grandTotalAmount: {
+    fontSize: 22,
     fontWeight: '700',
+    color: 'white',
   },
-  actions: {
+  actionButtonsRow: {
     gap: Spacing.sm,
-    marginTop: Spacing.md,
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.surface,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    gap: Spacing.xs,
+  },
+  exportButtonLabel: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  completeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.success,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.xs,
+    shadowColor: Colors.success,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  completeButtonLabel: {
+    fontSize: FontSizes.sm,
+    fontWeight: '600',
+    color: 'white',
   },
   // Modal styles
   modalContainer: {

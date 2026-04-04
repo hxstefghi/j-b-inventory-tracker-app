@@ -13,6 +13,7 @@ const ICONS = {
   history: 'history' as IconName,
   settings: 'settings' as IconName,
   add: 'add' as IconName,
+  remove: 'remove' as IconName,
   close: 'close' as IconName,
   chevronRight: 'chevron-right' as IconName,
   chevronLeft: 'chevron-left' as IconName,
@@ -38,6 +39,8 @@ const ICONS = {
   pdfExport: 'picture-as-pdf' as IconName,
   accessTime: 'access-time' as IconName,
   help: 'help-outline' as IconName,
+  trash: 'delete' as IconName,
+  lockClosed: 'lock' as IconName,
 } as const;
 
 export type IconKey = keyof typeof ICONS;
