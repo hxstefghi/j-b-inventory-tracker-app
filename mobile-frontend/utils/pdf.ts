@@ -20,14 +20,16 @@ export type CalculatedSoldOutMap = Record<string, number>;
 /**
  * Generate and share a PDF report for an inventory session
  * @param calculatedSoldOut Optional map of item name to calculated sold out from POS
+ * @param posTotal Optional POS sales total (revenue)
  */
 export async function generateSessionPDF(
   session: InventorySession,
   items: InventoryItem[],
   grandTotal: number,
-  calculatedSoldOut?: CalculatedSoldOutMap
+  calculatedSoldOut?: CalculatedSoldOutMap,
+  posTotal?: number
 ): Promise<void> {
-  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut);
+  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut, posTotal);
   
   const { uri } = await Print.printToFileAsync({
     html,
@@ -52,7 +54,8 @@ function generatePDFHTML(
   session: InventorySession,
   items: InventoryItem[],
   grandTotal: number,
-  calculatedSoldOut?: CalculatedSoldOutMap
+  calculatedSoldOut?: CalculatedSoldOutMap,
+  posTotal?: number
 ): string {
   const sessionDate = new Date(session.session_date);
   const formattedDate = formatDateLong(sessionDate);
@@ -330,8 +333,8 @@ function generatePDFHTML(
       </table>
       
       <div class="grand-total-row">
-        <span class="grand-total-label">Grand Total</span>
-        <span class="grand-total-value">₱${grandTotal.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
+        <span class="grand-total-label">Total Sales (POS)</span>
+        <span class="grand-total-value">₱${(posTotal || grandTotal).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
       </div>
       
       <div class="footer">

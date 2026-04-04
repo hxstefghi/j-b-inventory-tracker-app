@@ -120,7 +120,7 @@ export default function NewSessionScreen() {
           beg_balance: null,
           delivery: null,
           pull_out: null,
-          sold_out: null, // Will be calculated from POS data
+          sold_out: null,
           ending: null,
           remarks: null,
           sort_order: rawItem.sortOrder,

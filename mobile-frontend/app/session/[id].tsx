@@ -300,7 +300,7 @@ export default function SessionDetailScreen() {
         });
       }
       
-      await generateSessionPDF(sessionData, items, grandTotal, pdfCalculatedSoldOut);
+      await generateSessionPDF(sessionData, items, grandTotal, pdfCalculatedSoldOut, totalMenuSales);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -536,6 +536,7 @@ export default function SessionDetailScreen() {
               isSessionOpen={isSessionOpen}
               getSoldOutValue={getSoldOutValue}
               grandTotal={grandTotal}
+              posTotal={totalMenuSales}
               onUpdateField={handleUpdateField}
               onDeleteItem={handleDeleteItem}
               onAddItem={() => setPickerVisible(true)}
@@ -853,6 +854,7 @@ interface InventoryStepProps {
   isSessionOpen: boolean;
   getSoldOutValue: (item: InventoryItem) => number;
   grandTotal: number;
+  posTotal: number;
   onUpdateField: (itemId: string, field: string, value: string) => void;
   onDeleteItem: (item: InventoryItem) => void;
   onAddItem: () => void;
@@ -865,6 +867,7 @@ function InventoryStep({
   isSessionOpen,
   getSoldOutValue,
   grandTotal,
+  posTotal,
   onUpdateField,
   onDeleteItem,
   onAddItem,
@@ -916,15 +919,14 @@ function InventoryStep({
         </View>
       )}
 
-      {/* Grand Total */}
+      {/* Grand Total - Show POS Total (Revenue) */}
       {items.length > 0 && (
-        <View style={styles.grandTotalCard}>
-          <View style={styles.grandTotalIcon}>
-            <IconSymbol name="attachMoney" size={20} color="white" />
-          </View>
-          <View style={styles.grandTotalInfo}>
-            <Caption style={styles.grandTotalLabel}>Total Sales</Caption>
-            <Title style={styles.grandTotalAmount}>{formatCurrency(grandTotal)}</Title>
+        <View style={styles.posTotalCard}>
+          <View style={styles.posTotalRow}>
+            <View style={styles.posTotalItem}>
+              <Caption color="textMuted">POS Sales (Revenue)</Caption>
+              <Title style={styles.posTotalValue}>{formatCurrency(posTotal)}</Title>
+            </View>
           </View>
         </View>
       )}
@@ -1867,6 +1869,25 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: 'white',
+  },
+  posTotalCard: {
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginTop: Spacing.md,
+  },
+  posTotalRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  posTotalItem: {
+    alignItems: 'center',
+  },
+  posTotalValue: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: 'white',
+    marginTop: 4,
   },
 
   // Modal Styles

@@ -38,7 +38,7 @@ export const MENU_CATEGORIES: MenuCategoryConfig[] = [
 
 /**
  * Raw inventory item configuration
- * These are the actual inventory items tracked (chicken, rice, etc.)
+ * Separate items for different portion sizes (60g/120g skin, 1oz/3oz gravy)
  */
 export interface RawInventoryConfig {
   id: string;
@@ -49,15 +49,15 @@ export interface RawInventoryConfig {
 }
 
 export const RAW_INVENTORY_ITEMS: RawInventoryConfig[] = [
-  { id: 'chicken', name: 'Chicken', unit: 'pcs', unitPrice: 53.65, sortOrder: 1 },
-  { id: 'chix_skin_60g', name: 'Chix. Skin 60g', unit: 'pcs', unitPrice: 50, sortOrder: 2 },
-  { id: 'chix_skin_120g', name: 'Chix. Skin 120g', unit: 'pcs', unitPrice: 100, sortOrder: 3 },
+  { id: 'chicken', name: 'Chicken', unit: 'pcs', unitPrice: 52.07, sortOrder: 1 },
+  { id: 'chicken_skin_60g', name: 'Chicken Skin 60g', unit: 'pcs', unitPrice: 50, sortOrder: 2 },
+  { id: 'chicken_skin_120g', name: 'Chicken Skin 120g', unit: 'pcs', unitPrice: 100, sortOrder: 3 },
   { id: 'rice', name: 'Rice', unit: 'servings', unitPrice: 20, sortOrder: 4 },
   { id: 'gravy_1oz', name: 'Gravy 1oz', unit: 'servings', unitPrice: 15, sortOrder: 5 },
   { id: 'gravy_3oz', name: 'Gravy 3oz', unit: 'servings', unitPrice: 30, sortOrder: 6 },
   { id: 'water', name: 'Water', unit: 'bottles', unitPrice: 15, sortOrder: 7 },
   { id: 'coke_mismo', name: 'Coke Mismo', unit: 'bottles', unitPrice: 25, sortOrder: 8 },
-  { id: 'coke_1_5l', name: 'Coke 1.5L', unit: 'bottles', unitPrice: 0, sortOrder: 9 }, // No price (combo only)
+  { id: 'coke_1_5l', name: 'Coke 1.5L', unit: 'bottles', unitPrice: 0, sortOrder: 9 },
   { id: 'spicy_sauce', name: 'Spicy Sauce', unit: 'servings', unitPrice: 5, sortOrder: 10 },
 ];
 
@@ -72,8 +72,8 @@ export interface MenuItem {
   category: MenuCategory;
   recipe: {
     chicken?: number;
-    chix_skin_60g?: number;
-    chix_skin_120g?: number;
+    chicken_skin_60g?: number;
+    chicken_skin_120g?: number;
     rice?: number;
     gravy_1oz?: number;
     gravy_3oz?: number;
@@ -87,12 +87,13 @@ export interface MenuItem {
 
 export const MENU_ITEMS: MenuItem[] = [
   // ===== MEALS WITH RICE =====
+  // Note: Rice in meals is NOT tracked in inventory (only Extra Rice is tracked)
   {
     id: '1pc_chicken_rice',
     name: '1 pc Chicken w/ Rice',
     price: 70,
     category: 'meals_with_rice',
-    recipe: { chicken: 1, rice: 1 },
+    recipe: { chicken: 1 },
     sortOrder: 1,
   },
   {
@@ -100,7 +101,7 @@ export const MENU_ITEMS: MenuItem[] = [
     name: '2 pc Chicken w/ Rice',
     price: 115,
     category: 'meals_with_rice',
-    recipe: { chicken: 2, rice: 1 },
+    recipe: { chicken: 2 },
     sortOrder: 2,
   },
   
@@ -149,14 +150,15 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   
   // ===== COMBO MEALS =====
-  // Note: Coke Mismo in JB Fantastic 4 is NOT tracked in inventory
-  // (only individual Coke Mismo orders are tracked)
+  // Note: Coke in combo meals is NOT tracked in inventory calculation
+  // Rice in combos is NOT tracked in inventory (only Extra Rice is tracked)
+  // Individual Coke Mismo orders are tracked separately
   {
     id: 'jb_fantastic_4',
     name: 'JB Fantastic 4',
     price: 260,
     category: 'combos',
-    recipe: { chicken: 4, rice: 2 }, // Coke Mismo removed from tracking
+    recipe: { chicken: 4 },
     sortOrder: 8,
   },
   {
@@ -164,7 +166,7 @@ export const MENU_ITEMS: MenuItem[] = [
     name: 'JB Winner Winner',
     price: 510,
     category: 'combos',
-    recipe: { chicken: 8, rice: 4, coke_1_5l: 1 },
+    recipe: { chicken: 8 },
     sortOrder: 9,
   },
   
@@ -174,7 +176,7 @@ export const MENU_ITEMS: MenuItem[] = [
     name: 'Chicken Skin 60g',
     price: 50,
     category: 'chicken_skin',
-    recipe: { chix_skin_60g: 1 },
+    recipe: { chicken_skin_60g: 1 },
     sortOrder: 10,
   },
   {
@@ -182,7 +184,7 @@ export const MENU_ITEMS: MenuItem[] = [
     name: 'Chicken Skin 120g',
     price: 100,
     category: 'chicken_skin',
-    recipe: { chix_skin_120g: 1 },
+    recipe: { chicken_skin_120g: 1 },
     sortOrder: 11,
   },
   
@@ -221,7 +223,7 @@ export const MENU_ITEMS: MenuItem[] = [
   },
   
   // ===== DRINKS =====
-  // Note: Only individual Coke Mismo orders are tracked in inventory
+  // Individual Coke Mismo orders are tracked in inventory
   {
     id: 'coke_mismo',
     name: 'Coke Mismo',
@@ -259,8 +261,8 @@ export function calculateRawInventoryFromSales(
 ): Record<string, number> {
   const totals: Record<string, number> = {
     chicken: 0,
-    chix_skin_60g: 0,
-    chix_skin_120g: 0,
+    chicken_skin_60g: 0,
+    chicken_skin_120g: 0,
     rice: 0,
     gravy_1oz: 0,
     gravy_3oz: 0,
