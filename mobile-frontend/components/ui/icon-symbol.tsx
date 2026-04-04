@@ -41,6 +41,9 @@ const ICONS = {
   help: 'help-outline' as IconName,
   trash: 'delete' as IconName,
   lockClosed: 'lock' as IconName,
+  receipt: 'receipt' as IconName,
+  calculator: 'calculate' as IconName,
+  info: 'info-outline' as IconName,
 } as const;
 
 export type IconKey = keyof typeof ICONS;

@@ -5,7 +5,7 @@
  */
 
 import { supabase } from '../supabase';
-import type { Profile, InventorySession, InventoryItem, PresetItem } from './schema';
+import type { Profile, InventorySession, InventoryItem, PresetItem, PosSale } from './schema';
 
 // =============================================
 // PROFILES
@@ -251,4 +251,68 @@ export async function getSessionWithItems(sessionId: string) {
     items,
     grandTotal,
   };
+}
+
+// =============================================
+// POS SALES
+// =============================================
+
+export async function getPosSalesBySession(sessionId: string): Promise<PosSale[]> {
+  const { data, error } = await supabase
+    .from('pos_sales')
+    .select('*')
+    .eq('session_id', sessionId);
+  
+  if (error) throw error;
+  return (data || []) as PosSale[];
+}
+
+export async function upsertPosSale(
+  sessionId: string,
+  menuItemId: string,
+  quantitySold: number
+): Promise<PosSale> {
+  const { data, error } = await supabase
+    .from('pos_sales')
+    .upsert(
+      {
+        session_id: sessionId,
+        menu_item_id: menuItemId,
+        quantity_sold: quantitySold,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'session_id,menu_item_id' }
+    )
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as PosSale;
+}
+
+export async function upsertPosSalesBatch(
+  sessionId: string,
+  sales: { menuItemId: string; quantitySold: number }[]
+): Promise<void> {
+  const upsertData = sales.map(sale => ({
+    session_id: sessionId,
+    menu_item_id: sale.menuItemId,
+    quantity_sold: sale.quantitySold,
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await supabase
+    .from('pos_sales')
+    .upsert(upsertData, { onConflict: 'session_id,menu_item_id' });
+  
+  if (error) throw error;
+}
+
+export async function deletePosSalesBySession(sessionId: string): Promise<void> {
+  const { error } = await supabase
+    .from('pos_sales')
+    .delete()
+    .eq('session_id', sessionId);
+  
+  if (error) throw error;
 }
