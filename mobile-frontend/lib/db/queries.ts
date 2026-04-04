@@ -130,13 +130,9 @@ export async function createItem(item: any): Promise<InventoryItem> {
 }
 
 export async function updateItem(itemId: string, updates: any): Promise<InventoryItem> {
-  // Remove 'ending' from updates - it's a generated column
-  const sanitizedUpdates = { ...updates };
-  delete sanitizedUpdates.ending;
-  
   const { data, error } = await supabase
     .from('inventory_items')
-    .update(sanitizedUpdates)
+    .update(updates)
     .eq('id', itemId)
     .select()
     .single();
