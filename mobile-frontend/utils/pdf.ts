@@ -21,15 +21,17 @@ export type CalculatedSoldOutMap = Record<string, number>;
  * Generate and share a PDF report for an inventory session
  * @param calculatedSoldOut Optional map of item name to calculated sold out from POS
  * @param posTotal Optional POS sales total (revenue)
+ * @param chickenRevenue Optional chicken-specific revenue from combo meals
  */
 export async function generateSessionPDF(
   session: InventorySession,
   items: InventoryItem[],
   grandTotal: number,
   calculatedSoldOut?: CalculatedSoldOutMap,
-  posTotal?: number
+  posTotal?: number,
+  chickenRevenue?: number
 ): Promise<void> {
-  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut, posTotal);
+  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut, posTotal, chickenRevenue);
   
   const { uri } = await Print.printToFileAsync({
     html,
@@ -55,7 +57,8 @@ function generatePDFHTML(
   items: InventoryItem[],
   grandTotal: number,
   calculatedSoldOut?: CalculatedSoldOutMap,
-  posTotal?: number
+  posTotal?: number,
+  chickenRevenue?: number
 ): string {
   const sessionDate = new Date(session.session_date);
   const formattedDate = formatDateLong(sessionDate);
@@ -96,10 +99,28 @@ function generatePDFHTML(
       if (isNaN(soldOutNum)) soldOutNum = 0;
     }
     
+    // Detect if this is a chicken item (exact match "Chicken", not Chicken Skin)
+    // Chicken items should not show individual price, but should show total revenue
+    const isChickenItem = item.item_name === 'Chicken';
+    
     // Calculate total
     const price = parseFloat(item.price?.toString() || '0');
-    const total = soldOutNum > 0 ? soldOutNum * price : 0;
+    let total: number;
+    
+    // For chicken items, use revenue from combo meals instead of soldOut * price
+    if (isChickenItem && chickenRevenue !== undefined) {
+      total = chickenRevenue;
+    } else {
+      total = soldOutNum > 0 ? soldOutNum * price : 0;
+    }
+    
     const remarks = item.remarks || '';
+
+    // Price display: hide for chicken items, show for all others
+    const priceDisplay = isChickenItem ? '-' : (price > 0 ? 'P' + price.toFixed(2) : '-');
+    
+    // Total display: always show if there's a value (including for chicken)
+    const totalDisplay = total > 0 ? 'P' + total.toFixed(2) : '-';
 
     return `
       <tr>
@@ -109,8 +130,8 @@ function generatePDFHTML(
         <td class="num-cell">${pullOut}</td>
         <td class="num-cell">${ending}</td>
         <td class="num-cell">${soldOutDisplay}</td>
-        <td class="price-cell">${price > 0 ? 'P' + price.toFixed(0) : '-'}</td>
-        <td class="price-cell total-cell">${total > 0 ? 'P' + total.toFixed(0) : '-'}</td>
+        <td class="price-cell">${priceDisplay}</td>
+        <td class="price-cell total-cell">${totalDisplay}</td>
         <td class="remarks-cell">${remarks}</td>
       </tr>
     `;

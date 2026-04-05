@@ -50,8 +50,30 @@ import {
   MENU_ITEMS,
   MENU_CATEGORIES,
   getMenuItemsByCategory,
+  getMenuItem,
   MenuCategory,
 } from '@/constants/menu';
+
+/**
+ * Calculate total revenue from combo meals containing chicken
+ * Used for chicken items that don't have individual pricing
+ */
+function calculateChickenRevenueFromPOS(sales: PosSale[]): number {
+  let total = 0;
+  
+  for (const sale of sales) {
+    const menuItem = getMenuItem(sale.menu_item_id);
+    if (!menuItem) continue;
+    
+    // Count all menu items that include chicken in their recipe
+    // This includes: 1pc/2pc with rice, ala carte, assorted, combos
+    if (menuItem.recipe.chicken && menuItem.recipe.chicken > 0) {
+      total += menuItem.price * sale.quantity_sold;
+    }
+  }
+  
+  return total;
+}
 
 type SessionStep = 'pos' | 'inventory';
 
@@ -173,12 +195,24 @@ export default function SessionDetailScreen() {
     return isNumeric ? parseFloat(soldOutVal) : 0;
   };
 
-  // Calculate grand total (only from sold_out if it's numeric)
+  // Calculate grand total - for chicken items, use POS revenue instead of price * soldOut
   const grandTotal = items.reduce((sum, item) => {
     const soldOut = getSoldOutValue(item);
     const price = parseFloat(item.price?.toString() || '0');
+    
+    // For chicken items in new-style sessions, skip - revenue calculated from POS separately
+    const isChickenItem = item.item_name === 'Chicken';
+    
+    if (isChickenItem && isNewStyleSession) {
+      return sum; // Don't add soldOut * 0
+    }
+    
     return sum + (soldOut * price);
   }, 0);
+
+  // Add chicken revenue from POS combo meals for new-style sessions
+  const chickenRevenue = isNewStyleSession ? calculateChickenRevenueFromPOS(posSales) : 0;
+  const finalGrandTotal = grandTotal + chickenRevenue;
 
   // Handle field update
   const handleUpdateField = async (
@@ -300,7 +334,10 @@ export default function SessionDetailScreen() {
         });
       }
       
-      await generateSessionPDF(sessionData, items, grandTotal, pdfCalculatedSoldOut, totalMenuSales);
+      // Calculate chicken revenue from POS for new-style sessions
+      const chickenRevenue = isNewStyleSession ? calculateChickenRevenueFromPOS(posSales) : undefined;
+      
+      await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -535,8 +572,9 @@ export default function SessionDetailScreen() {
               isNewStyleSession={isNewStyleSession}
               isSessionOpen={isSessionOpen}
               getSoldOutValue={getSoldOutValue}
-              grandTotal={grandTotal}
+              grandTotal={finalGrandTotal}
               posTotal={totalMenuSales}
+              posSales={posSales}
               onUpdateField={handleUpdateField}
               onDeleteItem={handleDeleteItem}
               onAddItem={() => setPickerVisible(true)}
@@ -855,6 +893,7 @@ interface InventoryStepProps {
   getSoldOutValue: (item: InventoryItem) => number;
   grandTotal: number;
   posTotal: number;
+  posSales: PosSale[];
   onUpdateField: (itemId: string, field: string, value: string) => void;
   onDeleteItem: (item: InventoryItem) => void;
   onAddItem: () => void;
@@ -868,6 +907,7 @@ function InventoryStep({
   getSoldOutValue,
   grandTotal,
   posTotal,
+  posSales,
   onUpdateField,
   onDeleteItem,
   onAddItem,
@@ -912,6 +952,7 @@ function InventoryStep({
               isEditable={isSessionOpen}
               isNewStyleSession={isNewStyleSession}
               calculatedSoldOut={getSoldOutValue(item)}
+              posSales={posSales}
               onUpdate={onUpdateField}
               onDelete={() => onDeleteItem(item)}
             />
@@ -942,18 +983,28 @@ interface ItemCardProps {
   isEditable: boolean;
   isNewStyleSession: boolean;
   calculatedSoldOut: number;
+  posSales: PosSale[];
   onUpdate: (itemId: string, field: string, value: string) => void;
   onDelete: () => void;
 }
 
-function ItemCard({ item, index, isEditable, isNewStyleSession, calculatedSoldOut, onUpdate, onDelete }: ItemCardProps) {
+function ItemCard({ item, index, isEditable, isNewStyleSession, calculatedSoldOut, posSales, onUpdate, onDelete }: ItemCardProps) {
   const soldOut = isNewStyleSession ? calculatedSoldOut : (() => {
     const soldOutVal = item.sold_out || '';
     const isNumeric = /^[0-9]+\.?[0-9]*$/.test(soldOutVal);
     return isNumeric ? parseFloat(soldOutVal) : 0;
   })();
+  
+  const isChickenItem = item.item_name === 'Chicken';
   const price = parseFloat(item.price?.toString() || '0');
-  const total = soldOut * price;
+  
+  // For chicken items in new-style sessions, calculate revenue from POS combo sales
+  let total: number;
+  if (isChickenItem && isNewStyleSession) {
+    total = calculateChickenRevenueFromPOS(posSales);
+  } else {
+    total = soldOut * price;
+  }
 
   return (
     <TouchableOpacity
@@ -968,7 +1019,9 @@ function ItemCard({ item, index, isEditable, isNewStyleSession, calculatedSoldOu
           </View>
           <View style={styles.priceBadge}>
             <Caption color="textMuted" style={styles.priceLabel}>PRICE</Caption>
-            <Caption style={styles.priceValue}>{formatCurrency(price)}</Caption>
+            <Caption style={styles.priceValue}>
+              {isChickenItem ? '-' : formatCurrency(price)}
+            </Caption>
           </View>
           {isEditable && !isNewStyleSession && (
             <TouchableOpacity 
