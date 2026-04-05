@@ -49,7 +49,7 @@ export interface RawInventoryConfig {
 }
 
 export const RAW_INVENTORY_ITEMS: RawInventoryConfig[] = [
-  { id: 'chicken', name: 'Chicken', unit: 'pcs', unitPrice: 52.07, sortOrder: 1 },
+  { id: 'chicken', name: 'Chicken', unit: 'pcs', unitPrice: 0, sortOrder: 1 },
   { id: 'chicken_skin_60g', name: 'Chicken Skin 60g', unit: 'pcs', unitPrice: 50, sortOrder: 2 },
   { id: 'chicken_skin_120g', name: 'Chicken Skin 120g', unit: 'pcs', unitPrice: 100, sortOrder: 3 },
   { id: 'rice', name: 'Rice', unit: 'servings', unitPrice: 20, sortOrder: 4 },
