@@ -75,6 +75,7 @@ function calculateChickenRevenueFromPOS(sales: PosSale[]): number {
   return total;
 }
 
+<<<<<<< HEAD
 function calculateCoke15LRevenueFromPOS(sales: PosSale[]): number {
   let total = 0;
   
@@ -91,6 +92,8 @@ function calculateCoke15LRevenueFromPOS(sales: PosSale[]): number {
   return total;
 }
 
+=======
+>>>>>>> 6bf5e41ca2ba4995ac09c87dd2543de3c17c7315
 type SessionStep = 'pos' | 'inventory';
 
 export default function SessionDetailScreen() {
@@ -353,10 +356,14 @@ export default function SessionDetailScreen() {
       // Calculate chicken revenue from POS for new-style sessions
       const chickenRevenue = isNewStyleSession ? calculateChickenRevenueFromPOS(posSales) : undefined;
       
+<<<<<<< HEAD
       // Calculate Coke 1.5L revenue from POS for new-style sessions
       const coke15LRevenue = isNewStyleSession ? calculateCoke15LRevenueFromPOS(posSales) : undefined;
       
       await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue, coke15LRevenue);
+=======
+      await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue);
+>>>>>>> 6bf5e41ca2ba4995ac09c87dd2543de3c17c7315
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error exporting PDF:', error);
