@@ -22,6 +22,7 @@ export type CalculatedSoldOutMap = Record<string, number>;
  * @param calculatedSoldOut Optional map of item name to calculated sold out from POS
  * @param posTotal Optional POS sales total (revenue)
  * @param chickenRevenue Optional chicken-specific revenue from combo meals
+ * @param coke15LRevenue Optional Coke 1.5L revenue from menu item sales
  */
 export async function generateSessionPDF(
   session: InventorySession,
@@ -29,9 +30,10 @@ export async function generateSessionPDF(
   grandTotal: number,
   calculatedSoldOut?: CalculatedSoldOutMap,
   posTotal?: number,
-  chickenRevenue?: number
+  chickenRevenue?: number,
+  coke15LRevenue?: number
 ): Promise<void> {
-  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut, posTotal, chickenRevenue);
+  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut, posTotal, chickenRevenue, coke15LRevenue);
   
   const { uri } = await Print.printToFileAsync({
     html,
@@ -58,7 +60,8 @@ function generatePDFHTML(
   grandTotal: number,
   calculatedSoldOut?: CalculatedSoldOutMap,
   posTotal?: number,
-  chickenRevenue?: number
+  chickenRevenue?: number,
+  coke15LRevenue?: number
 ): string {
   const sessionDate = new Date(session.session_date);
   const formattedDate = formatDateLong(sessionDate);
@@ -100,26 +103,33 @@ function generatePDFHTML(
     }
     
     // Detect if this is a chicken item (exact match "Chicken", not Chicken Skin)
-    // Chicken items should not show individual price, but should show total revenue
+    // or Coke 1.5L item - these should show revenue from POS sales
     const isChickenItem = item.item_name === 'Chicken';
+    const isCoke15LItem = item.item_name === 'Coke 1.5L';
     
     // Calculate total
     const price = parseFloat(item.price?.toString() || '0');
     let total: number;
+    let displayPrice: number = price;
     
     // For chicken items, use revenue from combo meals instead of soldOut * price
     if (isChickenItem && chickenRevenue !== undefined) {
       total = chickenRevenue;
+    } else if (isCoke15LItem && coke15LRevenue !== undefined) {
+      // For Coke 1.5L, use revenue from menu item sales
+      total = coke15LRevenue;
+      // Show price as 85 (menu item price) even though unitPrice is 0
+      displayPrice = 85;
     } else {
       total = soldOutNum > 0 ? soldOutNum * price : 0;
     }
     
     const remarks = item.remarks || '';
 
-    // Price display: hide for chicken items, show for all others
-    const priceDisplay = isChickenItem ? '-' : (price > 0 ? 'P' + price.toFixed(2) : '-');
+    // Price display: hide only for chicken items, show for Coke 1.5L and others
+    const priceDisplay = isChickenItem ? '-' : (displayPrice > 0 ? 'P' + displayPrice.toFixed(2) : '-');
     
-    // Total display: always show if there's a value (including for chicken)
+    // Total display: always show if there's a value (including for chicken and Coke 1.5L)
     const totalDisplay = total > 0 ? 'P' + total.toFixed(2) : '-';
 
     return `

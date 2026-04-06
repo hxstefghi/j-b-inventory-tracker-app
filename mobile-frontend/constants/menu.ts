@@ -57,8 +57,10 @@ export const RAW_INVENTORY_ITEMS: RawInventoryConfig[] = [
   { id: 'gravy_3oz', name: 'Gravy 3oz', unit: 'servings', unitPrice: 30, sortOrder: 6 },
   { id: 'water', name: 'Water', unit: 'bottles', unitPrice: 15, sortOrder: 7 },
   { id: 'coke_mismo', name: 'Coke Mismo', unit: 'bottles', unitPrice: 25, sortOrder: 8 },
-  { id: 'coke_1_5l', name: 'Coke 1.5L', unit: 'bottles', unitPrice: 0, sortOrder: 9 },
-  { id: 'spicy_sauce', name: 'Spicy Sauce', unit: 'servings', unitPrice: 5, sortOrder: 10 },
+  { id: 'cups_coke', name: 'Cups Coke', unit: 'cups', unitPrice: 1, sortOrder: 9 },
+  { id: 'coke_1_5l', name: 'Coke 1.5L', unit: 'bottles', unitPrice: 0, sortOrder: 10 },
+  { id: 'spicy_sauce', name: 'Spicy Sauce', unit: 'servings', unitPrice: 5, sortOrder: 11 },
+  { id: 'spicy', name: 'Spicy', unit: 'servings', unitPrice: 5, sortOrder: 12 },
 ];
 
 /**
@@ -79,8 +81,10 @@ export interface MenuItem {
     gravy_3oz?: number;
     water?: number;
     coke_mismo?: number;
+    cups_coke?: number;
     coke_1_5l?: number;
     spicy_sauce?: number;
+    spicy?: number;
   };
   sortOrder: number;
 }
@@ -221,6 +225,14 @@ export const MENU_ITEMS: MenuItem[] = [
     recipe: { spicy_sauce: 1 },
     sortOrder: 15,
   },
+  {
+    id: 'spicy',
+    name: 'Spicy',
+    price: 5,
+    category: 'extras',
+    recipe: { spicy: 1 },
+    sortOrder: 16,
+  },
   
   // ===== DRINKS =====
   // Individual Coke Mismo orders are tracked in inventory
@@ -230,7 +242,7 @@ export const MENU_ITEMS: MenuItem[] = [
     price: 25,
     category: 'drinks',
     recipe: { coke_mismo: 1 },
-    sortOrder: 16,
+    sortOrder: 17,
   },
   {
     id: 'bottle_water',
@@ -238,7 +250,23 @@ export const MENU_ITEMS: MenuItem[] = [
     price: 15,
     category: 'drinks',
     recipe: { water: 1 },
-    sortOrder: 17,
+    sortOrder: 21,
+  },
+  {
+    id: 'cups_coke',
+    name: 'Cups Coke',
+    price: 1,
+    category: 'drinks',
+    recipe: { cups_coke: 1 },
+    sortOrder: 19,
+  },
+  {
+    id: 'coke_1_5l',
+    name: 'Coke 1.5',
+    price: 85,
+    category: 'drinks',
+    recipe: { coke_1_5l: 1 },
+    sortOrder: 20,
   },
 ];
 
@@ -268,8 +296,10 @@ export function calculateRawInventoryFromSales(
     gravy_3oz: 0,
     water: 0,
     coke_mismo: 0,
+    cups_coke: 0,
     coke_1_5l: 0,
     spicy_sauce: 0,
+    spicy: 0,
   };
 
   for (const sale of sales) {
