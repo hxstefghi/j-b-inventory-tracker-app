@@ -1,6 +1,6 @@
 /**
  * Menu Items & Raw Inventory Configuration
- * 
+ *
  * Contains all JB Chicken menu items with their ingredient recipes,
  * and raw inventory items with unit prices.
  */
@@ -8,14 +8,14 @@
 /**
  * Menu category types for organizing POS entry
  */
-export type MenuCategory = 
-  | 'meals_with_rice'
-  | 'ala_carte'
-  | 'assorted'
-  | 'combos'
-  | 'chicken_skin'
-  | 'extras'
-  | 'drinks';
+export type MenuCategory =
+  | "meals_with_rice"
+  | "ala_carte"
+  | "assorted"
+  | "combos"
+  | "chicken_skin"
+  | "extras"
+  | "drinks";
 
 /**
  * Menu category configuration for display
@@ -27,13 +27,13 @@ export interface MenuCategoryConfig {
 }
 
 export const MENU_CATEGORIES: MenuCategoryConfig[] = [
-  { id: 'meals_with_rice', label: 'Meals with Rice', icon: 'restaurant' },
-  { id: 'ala_carte', label: 'Ala Carte', icon: 'restaurant' },
-  { id: 'assorted', label: 'Assorted Parts', icon: 'category' },
-  { id: 'combos', label: 'Combo Meals', icon: 'star' },
-  { id: 'chicken_skin', label: 'Chicken Skin', icon: 'info' },
-  { id: 'extras', label: 'Extras', icon: 'add' },
-  { id: 'drinks', label: 'Drinks', icon: 'info' },
+  { id: "meals_with_rice", label: "Meals with Rice", icon: "restaurant" },
+  { id: "ala_carte", label: "Ala Carte", icon: "restaurant" },
+  { id: "assorted", label: "Assorted Parts", icon: "category" },
+  { id: "combos", label: "Combo Meals", icon: "star" },
+  { id: "chicken_skin", label: "Chicken Skin", icon: "info" },
+  { id: "extras", label: "Extras", icon: "add" },
+  { id: "drinks", label: "Drinks", icon: "info" },
 ];
 
 /**
@@ -49,16 +49,66 @@ export interface RawInventoryConfig {
 }
 
 export const RAW_INVENTORY_ITEMS: RawInventoryConfig[] = [
-  { id: 'chicken', name: 'Chicken', unit: 'pcs', unitPrice: 0, sortOrder: 1 },
-  { id: 'chicken_skin_60g', name: 'Chicken Skin 60g', unit: 'pcs', unitPrice: 50, sortOrder: 2 },
-  { id: 'chicken_skin_120g', name: 'Chicken Skin 120g', unit: 'pcs', unitPrice: 100, sortOrder: 3 },
-  { id: 'rice', name: 'Rice', unit: 'servings', unitPrice: 20, sortOrder: 4 },
-  { id: 'gravy_1oz', name: 'Gravy 1oz', unit: 'servings', unitPrice: 15, sortOrder: 5 },
-  { id: 'gravy_3oz', name: 'Gravy 3oz', unit: 'servings', unitPrice: 30, sortOrder: 6 },
-  { id: 'water', name: 'Water', unit: 'bottles', unitPrice: 15, sortOrder: 7 },
-  { id: 'coke_mismo', name: 'Coke Mismo', unit: 'bottles', unitPrice: 25, sortOrder: 8 },
-  { id: 'coke_1_5l', name: 'Coke 1.5L', unit: 'bottles', unitPrice: 0, sortOrder: 9 },
-  { id: 'spicy_sauce', name: 'Spicy Sauce', unit: 'servings', unitPrice: 5, sortOrder: 10 },
+  { id: "chicken", name: "Chicken", unit: "pcs", unitPrice: 0, sortOrder: 1 },
+  {
+    id: "chicken_skin_60g",
+    name: "Chicken Skin 60g",
+    unit: "pcs",
+    unitPrice: 50,
+    sortOrder: 2,
+  },
+  {
+    id: "chicken_skin_120g",
+    name: "Chicken Skin 120g",
+    unit: "pcs",
+    unitPrice: 100,
+    sortOrder: 3,
+  },
+  { id: "rice", name: "Rice", unit: "servings", unitPrice: 20, sortOrder: 4 },
+  {
+    id: "gravy_1oz",
+    name: "Gravy 1oz",
+    unit: "servings",
+    unitPrice: 15,
+    sortOrder: 5,
+  },
+  {
+    id: "gravy_3oz",
+    name: "Gravy 3oz",
+    unit: "servings",
+    unitPrice: 30,
+    sortOrder: 6,
+  },
+  { id: "water", name: "Water", unit: "bottles", unitPrice: 15, sortOrder: 7 },
+  {
+    id: "coke_mismo",
+    name: "Coke Mismo",
+    unit: "bottles",
+    unitPrice: 25,
+    sortOrder: 8,
+  },
+  {
+    id: "cups_coke",
+    name: "Cups Coke",
+    unit: "cups",
+    unitPrice: 1,
+    sortOrder: 9,
+  },
+  {
+    id: "coke_1_5l",
+    name: "Coke 1.5L",
+    unit: "bottles",
+    unitPrice: 0,
+    sortOrder: 10,
+  },
+  {
+    id: "spicy_sauce",
+    name: "Spicy Sauce",
+    unit: "servings",
+    unitPrice: 5,
+    sortOrder: 11,
+  },
+  { id: "spicy", name: "Spicy", unit: "servings", unitPrice: 5, sortOrder: 12 },
 ];
 
 /**
@@ -79,8 +129,10 @@ export interface MenuItem {
     gravy_3oz?: number;
     water?: number;
     coke_mismo?: number;
+    cups_coke?: number;
     coke_1_5l?: number;
     spicy_sauce?: number;
+    spicy?: number;
   };
   sortOrder: number;
 }
@@ -89,156 +141,180 @@ export const MENU_ITEMS: MenuItem[] = [
   // ===== MEALS WITH RICE =====
   // Note: Rice in meals is NOT tracked in inventory (only Extra Rice is tracked)
   {
-    id: '1pc_chicken_rice',
-    name: '1 pc Chicken w/ Rice',
+    id: "1pc_chicken_rice",
+    name: "1 pc Chicken w/ Rice",
     price: 70,
-    category: 'meals_with_rice',
+    category: "meals_with_rice",
     recipe: { chicken: 1 },
     sortOrder: 1,
   },
   {
-    id: '2pc_chicken_rice',
-    name: '2 pc Chicken w/ Rice',
+    id: "2pc_chicken_rice",
+    name: "2 pc Chicken w/ Rice",
     price: 115,
-    category: 'meals_with_rice',
+    category: "meals_with_rice",
     recipe: { chicken: 2 },
     sortOrder: 2,
   },
-  
+
   // ===== ALA CARTE =====
   {
-    id: '1pc_chicken_ala_carte',
-    name: '1 pc Chicken Ala Carte',
+    id: "1pc_chicken_ala_carte",
+    name: "1 pc Chicken Ala Carte",
     price: 50,
-    category: 'ala_carte',
+    category: "ala_carte",
     recipe: { chicken: 1 },
     sortOrder: 3,
   },
   {
-    id: '2pc_chicken_ala_carte',
-    name: '2 pc Chicken Ala Carte',
+    id: "2pc_chicken_ala_carte",
+    name: "2 pc Chicken Ala Carte",
     price: 95,
-    category: 'ala_carte',
+    category: "ala_carte",
     recipe: { chicken: 2 },
     sortOrder: 4,
   },
-  
+
   // ===== ASSORTED PARTS =====
   {
-    id: '4pcs_assorted',
-    name: '4 pcs Assorted Parts',
+    id: "4pcs_assorted",
+    name: "4 pcs Assorted Parts",
     price: 190,
-    category: 'assorted',
+    category: "assorted",
     recipe: { chicken: 4 },
     sortOrder: 5,
   },
   {
-    id: '6pcs_assorted',
-    name: '6 pcs Assorted Parts',
+    id: "6pcs_assorted",
+    name: "6 pcs Assorted Parts",
     price: 285,
-    category: 'assorted',
+    category: "assorted",
     recipe: { chicken: 6 },
     sortOrder: 6,
   },
   {
-    id: '8pcs_assorted',
-    name: '8 pcs Assorted Parts',
+    id: "8pcs_assorted",
+    name: "8 pcs Assorted Parts",
     price: 380,
-    category: 'assorted',
+    category: "assorted",
     recipe: { chicken: 8 },
     sortOrder: 7,
   },
-  
+
   // ===== COMBO MEALS =====
   // Note: Coke in combo meals is NOT tracked in inventory calculation
   // Rice in combos is NOT tracked in inventory (only Extra Rice is tracked)
   // Individual Coke Mismo orders are tracked separately
   {
-    id: 'jb_fantastic_4',
-    name: 'JB Fantastic 4',
+    id: "jb_fantastic_4",
+    name: "JB Fantastic 4",
     price: 260,
-    category: 'combos',
+    category: "combos",
     recipe: { chicken: 4 },
     sortOrder: 8,
   },
   {
-    id: 'jb_winner_winner',
-    name: 'JB Winner Winner',
+    id: "jb_winner_winner",
+    name: "JB Winner Winner",
     price: 510,
-    category: 'combos',
+    category: "combos",
     recipe: { chicken: 8 },
     sortOrder: 9,
   },
-  
+
   // ===== CHICKEN SKIN =====
   {
-    id: 'chicken_skin_60g',
-    name: 'Chicken Skin 60g',
+    id: "chicken_skin_60g",
+    name: "Chicken Skin 60g",
     price: 50,
-    category: 'chicken_skin',
+    category: "chicken_skin",
     recipe: { chicken_skin_60g: 1 },
     sortOrder: 10,
   },
   {
-    id: 'chicken_skin_120g',
-    name: 'Chicken Skin 120g',
+    id: "chicken_skin_120g",
+    name: "Chicken Skin 120g",
     price: 100,
-    category: 'chicken_skin',
+    category: "chicken_skin",
     recipe: { chicken_skin_120g: 1 },
     sortOrder: 11,
   },
-  
+
   // ===== EXTRAS =====
   {
-    id: 'extra_rice',
-    name: 'Extra Rice',
+    id: "extra_rice",
+    name: "Extra Rice",
     price: 20,
-    category: 'extras',
+    category: "extras",
     recipe: { rice: 1 },
     sortOrder: 12,
   },
   {
-    id: 'extra_gravy_1oz',
-    name: 'Extra Gravy 1oz',
+    id: "extra_gravy_1oz",
+    name: "Extra Gravy 1oz",
     price: 15,
-    category: 'extras',
+    category: "extras",
     recipe: { gravy_1oz: 1 },
     sortOrder: 13,
   },
   {
-    id: 'extra_gravy_3oz',
-    name: 'Extra Gravy 3oz',
+    id: "extra_gravy_3oz",
+    name: "Extra Gravy 3oz",
     price: 30,
-    category: 'extras',
+    category: "extras",
     recipe: { gravy_3oz: 1 },
     sortOrder: 14,
   },
   {
-    id: 'spicy_sauce',
-    name: 'Spicy Sauce',
+    id: "spicy_sauce",
+    name: "Spicy Sauce",
     price: 5,
-    category: 'extras',
+    category: "extras",
     recipe: { spicy_sauce: 1 },
     sortOrder: 15,
   },
-  
+  {
+    id: "spicy",
+    name: "Spicy",
+    price: 5,
+    category: "extras",
+    recipe: { spicy: 1 },
+    sortOrder: 16,
+  },
+
   // ===== DRINKS =====
   // Individual Coke Mismo orders are tracked in inventory
   {
-    id: 'coke_mismo',
-    name: 'Coke Mismo',
+    id: "coke_mismo",
+    name: "Coke Mismo",
     price: 25,
-    category: 'drinks',
+    category: "drinks",
     recipe: { coke_mismo: 1 },
-    sortOrder: 16,
+    sortOrder: 17,
   },
   {
-    id: 'bottle_water',
-    name: 'Bottle Water',
+    id: "bottle_water",
+    name: "Bottle Water",
     price: 15,
-    category: 'drinks',
+    category: "drinks",
     recipe: { water: 1 },
-    sortOrder: 17,
+    sortOrder: 21,
+  },
+  {
+    id: "cups_coke",
+    name: "Cups Coke",
+    price: 1,
+    category: "drinks",
+    recipe: { cups_coke: 1 },
+    sortOrder: 19,
+  },
+  {
+    id: "coke_1_5l",
+    name: "Coke 1.5",
+    price: 85,
+    category: "drinks",
+    recipe: { coke_1_5l: 1 },
+    sortOrder: 20,
   },
 ];
 
@@ -246,9 +322,9 @@ export const MENU_ITEMS: MenuItem[] = [
  * Get menu items by category
  */
 export function getMenuItemsByCategory(category: MenuCategory): MenuItem[] {
-  return MENU_ITEMS
-    .filter(item => item.category === category)
-    .sort((a, b) => a.sortOrder - b.sortOrder);
+  return MENU_ITEMS.filter((item) => item.category === category).sort(
+    (a, b) => a.sortOrder - b.sortOrder,
+  );
 }
 
 /**
@@ -257,7 +333,7 @@ export function getMenuItemsByCategory(category: MenuCategory): MenuItem[] {
  * @returns Object with raw inventory item IDs and their total quantities used
  */
 export function calculateRawInventoryFromSales(
-  sales: { menuItemId: string; quantity: number }[]
+  sales: { menuItemId: string; quantity: number }[],
 ): Record<string, number> {
   const totals: Record<string, number> = {
     chicken: 0,
@@ -268,12 +344,14 @@ export function calculateRawInventoryFromSales(
     gravy_3oz: 0,
     water: 0,
     coke_mismo: 0,
+    cups_coke: 0,
     coke_1_5l: 0,
     spicy_sauce: 0,
+    spicy: 0,
   };
 
   for (const sale of sales) {
-    const menuItem = MENU_ITEMS.find(item => item.id === sale.menuItemId);
+    const menuItem = MENU_ITEMS.find((item) => item.id === sale.menuItemId);
     if (!menuItem) continue;
 
     for (const [ingredient, qty] of Object.entries(menuItem.recipe)) {
@@ -289,13 +367,15 @@ export function calculateRawInventoryFromSales(
 /**
  * Get raw inventory item by ID
  */
-export function getRawInventoryItem(id: string): RawInventoryConfig | undefined {
-  return RAW_INVENTORY_ITEMS.find(item => item.id === id);
+export function getRawInventoryItem(
+  id: string,
+): RawInventoryConfig | undefined {
+  return RAW_INVENTORY_ITEMS.find((item) => item.id === id);
 }
 
 /**
  * Get menu item by ID
  */
 export function getMenuItem(id: string): MenuItem | undefined {
-  return MENU_ITEMS.find(item => item.id === id);
+  return MENU_ITEMS.find((item) => item.id === id);
 }

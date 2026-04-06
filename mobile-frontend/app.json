@@ -12,6 +12,8 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.jbchicken.inventorytracker",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,7 +29,11 @@
     },
     "extra": {
       "EXPO_PUBLIC_SUPABASE_URL": "https://ibfcfqleupjyjemuvcia.supabase.co",
-      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliZmNmcWxldXBqeWplbXV2Y2lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTU3NDksImV4cCI6MjA5MDc5MTc0OX0.fg3EHlkR8u5nfTTv2-Oj2B1eKMYOLFxGsr60N00NsYQ"
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImliZmNmcWxldXBqeWplbXV2Y2lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUyMTU3NDksImV4cCI6MjA5MDc5MTc0OX0.fg3EHlkR8u5nfTTv2-Oj2B1eKMYOLFxGsr60N00NsYQ",
+      "router": {},
+      "eas": {
+        "projectId": "35e325c6-aaaa-4c3d-8d65-ef2994dda7bf"
+      }
     },
     "plugins": [
       "expo-router",

@@ -75,6 +75,21 @@ function calculateChickenRevenueFromPOS(sales: PosSale[]): number {
   return total;
 }
 
+function calculateCoke15LRevenueFromPOS(sales: PosSale[]): number {
+  let total = 0;
+  
+  for (const sale of sales) {
+    const menuItem = getMenuItem(sale.menu_item_id);
+    if (!menuItem) continue;
+    
+    // Count all menu items that include Coke 1.5L in their recipe
+    if (menuItem.recipe.coke_1_5l && menuItem.recipe.coke_1_5l > 0) {
+      total += menuItem.price * sale.quantity_sold;
+    }
+  }
+  
+  return total;
+}
 type SessionStep = 'pos' | 'inventory';
 
 export default function SessionDetailScreen() {
@@ -337,6 +352,10 @@ export default function SessionDetailScreen() {
       // Calculate chicken revenue from POS for new-style sessions
       const chickenRevenue = isNewStyleSession ? calculateChickenRevenueFromPOS(posSales) : undefined;
       
+      // Calculate Coke 1.5L revenue from POS for new-style sessions
+      const coke15LRevenue = isNewStyleSession ? calculateCoke15LRevenueFromPOS(posSales) : undefined;
+      
+      await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue, coke15LRevenue);
       await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {

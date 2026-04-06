@@ -1,15 +1,15 @@
 /**
  * PDF Generation Utility
- * 
+ *
  * Generates PDF reports matching the paper inventory format.
  * Uses expo-print for HTML to PDF conversion.
  * Design: Minimalist Orange/Black/White theme
  */
 
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import { formatCurrency, formatDateLong } from './format';
-import type { InventorySession, InventoryItem } from '@/lib/db/schema';
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import { formatCurrency, formatDateLong } from "./format";
+import type { InventorySession, InventoryItem } from "@/lib/db/schema";
 
 /**
  * Calculated sold out values from POS sales (optional)
@@ -22,6 +22,7 @@ export type CalculatedSoldOutMap = Record<string, number>;
  * @param calculatedSoldOut Optional map of item name to calculated sold out from POS
  * @param posTotal Optional POS sales total (revenue)
  * @param chickenRevenue Optional chicken-specific revenue from combo meals
+ * @param coke15LRevenue Optional Coke 1.5L revenue from menu item sales
  */
 export async function generateSessionPDF(
   session: InventorySession,
@@ -29,10 +30,19 @@ export async function generateSessionPDF(
   grandTotal: number,
   calculatedSoldOut?: CalculatedSoldOutMap,
   posTotal?: number,
-  chickenRevenue?: number
+  chickenRevenue?: number,
+  coke15LRevenue?: number,
 ): Promise<void> {
-  const html = generatePDFHTML(session, items, grandTotal, calculatedSoldOut, posTotal, chickenRevenue);
-  
+  const html = generatePDFHTML(
+    session,
+    items,
+    grandTotal,
+    calculatedSoldOut,
+    posTotal,
+    chickenRevenue,
+    coke15LRevenue,
+  );
+
   const { uri } = await Print.printToFileAsync({
     html,
     base64: false,
@@ -41,9 +51,9 @@ export async function generateSessionPDF(
   // Share the PDF
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, {
-      mimeType: 'application/pdf',
+      mimeType: "application/pdf",
       dialogTitle: `Inventory Report - ${formatDateLong(new Date(session.session_date))}`,
-      UTI: 'com.adobe.pdf',
+      UTI: "com.adobe.pdf",
     });
   }
 }
@@ -58,71 +68,87 @@ function generatePDFHTML(
   grandTotal: number,
   calculatedSoldOut?: CalculatedSoldOutMap,
   posTotal?: number,
-  chickenRevenue?: number
+  chickenRevenue?: number,
+  coke15LRevenue?: number,
 ): string {
   const sessionDate = new Date(session.session_date);
   const formattedDate = formatDateLong(sessionDate);
-  
+
   // Format current time in Philippines timezone
   const now = new Date();
-  const phTime = now.toLocaleString('en-PH', { 
-    timeZone: 'Asia/Manila',
-    month: 'numeric',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
+  const phTime = now.toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
   });
 
   // Generate table rows
-  const tableRows = items.map((item, index) => {
-    // Allow null values - display as "-" if null/empty
-    const begBalance = item.beg_balance || '-';
-    const delivery = item.delivery || '-';
-    const pullOut = item.pull_out || '-';
-    const ending = item.ending || '-';
-    
-    // Use calculated sold out from POS if available, otherwise use stored value
-    let soldOutDisplay: string;
-    let soldOutNum: number;
-    
-    if (calculatedSoldOut && calculatedSoldOut[item.item_name] !== undefined) {
-      // New-style session with POS calculation
-      soldOutNum = calculatedSoldOut[item.item_name];
-      soldOutDisplay = soldOutNum > 0 ? soldOutNum.toString() : '-';
-    } else {
-      // Old-style session - use stored value
-      const storedSoldOut = item.sold_out || '-';
-      soldOutDisplay = storedSoldOut;
-      soldOutNum = parseFloat(storedSoldOut);
-      if (isNaN(soldOutNum)) soldOutNum = 0;
-    }
-    
-    // Detect if this is a chicken item (exact match "Chicken", not Chicken Skin)
-    // Chicken items should not show individual price, but should show total revenue
-    const isChickenItem = item.item_name === 'Chicken';
-    
-    // Calculate total
-    const price = parseFloat(item.price?.toString() || '0');
-    let total: number;
-    
-    // For chicken items, use revenue from combo meals instead of soldOut * price
-    if (isChickenItem && chickenRevenue !== undefined) {
-      total = chickenRevenue;
-    } else {
-      total = soldOutNum > 0 ? soldOutNum * price : 0;
-    }
-    
-    const remarks = item.remarks || '';
+  const tableRows = items
+    .map((item, index) => {
+      // Allow null values - display as "-" if null/empty
+      const begBalance = item.beg_balance || "-";
+      const delivery = item.delivery || "-";
+      const pullOut = item.pull_out || "-";
+      const ending = item.ending || "-";
 
-    // Price display: hide for chicken items, show for all others
-    const priceDisplay = isChickenItem ? '-' : (price > 0 ? 'P' + price.toFixed(2) : '-');
-    
-    // Total display: always show if there's a value (including for chicken)
-    const totalDisplay = total > 0 ? 'P' + total.toFixed(2) : '-';
+      // Use calculated sold out from POS if available, otherwise use stored value
+      let soldOutDisplay: string;
+      let soldOutNum: number;
 
-    return `
+      if (
+        calculatedSoldOut &&
+        calculatedSoldOut[item.item_name] !== undefined
+      ) {
+        // New-style session with POS calculation
+        soldOutNum = calculatedSoldOut[item.item_name];
+        soldOutDisplay = soldOutNum > 0 ? soldOutNum.toString() : "-";
+      } else {
+        // Old-style session - use stored value
+        const storedSoldOut = item.sold_out || "-";
+        soldOutDisplay = storedSoldOut;
+        soldOutNum = parseFloat(storedSoldOut);
+        if (isNaN(soldOutNum)) soldOutNum = 0;
+      }
+
+      // Detect if this is a chicken item (exact match "Chicken", not Chicken Skin)
+      // or Coke 1.5L item - these should show revenue from POS sales
+      const isChickenItem = item.item_name === "Chicken";
+      const isCoke15LItem = item.item_name === "Coke 1.5L";
+
+      // Calculate total
+      const price = parseFloat(item.price?.toString() || "0");
+      let total: number;
+      let displayPrice: number = price;
+
+      // For chicken items, use revenue from combo meals instead of soldOut * price
+      if (isChickenItem && chickenRevenue !== undefined) {
+        total = chickenRevenue;
+      } else if (isCoke15LItem && coke15LRevenue !== undefined) {
+        // For Coke 1.5L, use revenue from menu item sales
+        total = coke15LRevenue;
+        // Show price as 85 (menu item price) even though unitPrice is 0
+        displayPrice = 85;
+      } else {
+        total = soldOutNum > 0 ? soldOutNum * price : 0;
+      }
+
+      const remarks = item.remarks || "";
+
+      // Price display: hide only for chicken items, show for Coke 1.5L and others
+      const priceDisplay = isChickenItem
+        ? "-"
+        : displayPrice > 0
+          ? "P" + displayPrice.toFixed(2)
+          : "-";
+
+      // Total display: always show if there's a value (including for chicken and Coke 1.5L)
+      const totalDisplay = total > 0 ? "P" + total.toFixed(2) : "-";
+
+      return `
       <tr>
         <td class="item-cell">${item.item_name}</td>
         <td class="num-cell">${begBalance}</td>
@@ -135,7 +161,8 @@ function generatePDFHTML(
         <td class="remarks-cell">${remarks}</td>
       </tr>
     `;
-  }).join('');
+    })
+    .join("");
 
   return `
     <!DOCTYPE html>
@@ -323,7 +350,7 @@ function generatePDFHTML(
                 <span class="meta-label">Cashier:</span> ${session.cashier_name}
               </div>
               <div class="session-meta-row">
-                <span class="meta-label">Status:</span> ${session.status === 'open' ? 'Open' : 'Closed'}
+                <span class="meta-label">Status:</span> ${session.status === "open" ? "Open" : "Closed"}
               </div>
             </div>
           </div>
@@ -355,7 +382,7 @@ function generatePDFHTML(
       
       <div class="grand-total-row">
         <span class="grand-total-label">Total Sales (POS)</span>
-        <span class="grand-total-value">₱${(posTotal || grandTotal).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}</span>
+        <span class="grand-total-value">₱${(posTotal || grandTotal).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ",")}</span>
       </div>
       
       <div class="footer">
