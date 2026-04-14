@@ -357,9 +357,9 @@ export default function SessionDetailScreen() {
       
       await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue, coke15LRevenue);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error exporting PDF:', error);
-      Alert.alert('Error', 'Failed to export PDF');
+      Alert.alert('Error', `Failed to export PDF: ${error.message || 'Unknown error'}`);
     } finally {
       setExporting(false);
     }
