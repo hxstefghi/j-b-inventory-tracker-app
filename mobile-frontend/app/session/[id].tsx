@@ -356,7 +356,6 @@ export default function SessionDetailScreen() {
       const coke15LRevenue = isNewStyleSession ? calculateCoke15LRevenueFromPOS(posSales) : undefined;
       
       await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue, coke15LRevenue);
-      await generateSessionPDF(sessionData, items, finalGrandTotal, pdfCalculatedSoldOut, totalMenuSales, chickenRevenue);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error exporting PDF:', error);
