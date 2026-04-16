@@ -20,7 +20,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/hooks/use-auth';
@@ -93,6 +93,7 @@ function calculateCoke15LRevenueFromPOS(sales: PosSale[]): number {
 type SessionStep = 'pos' | 'inventory';
 
 export default function SessionDetailScreen() {
+  const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { session: authSession } = useAuth();
   const navigation = useNavigation();
@@ -603,7 +604,7 @@ export default function SessionDetailScreen() {
 
       {/* Bottom Action Bar */}
       {isNewStyleSession && items.length > 0 && (
-        <View style={styles.bottomSection}>
+        <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, Spacing.md) }]}>
           {currentStep === 'pos' ? (
             <TouchableOpacity
               style={[styles.nextButton, savingPos && styles.nextButtonDisabled]}
@@ -1864,9 +1865,13 @@ const styles = StyleSheet.create({
   },
   actionButtonsRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
     gap: Spacing.sm,
   },
   backButtonPos: {
+    flex: 1,
+    minWidth: '45%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1880,6 +1885,7 @@ const styles = StyleSheet.create({
   },
   exportButton: {
     flex: 1,
+    minWidth: '45%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1897,11 +1903,13 @@ const styles = StyleSheet.create({
     color: Colors.primary,
   },
   completeButton: {
+    flex: 1,
+    minWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.success,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.md,
     gap: Spacing.xs,

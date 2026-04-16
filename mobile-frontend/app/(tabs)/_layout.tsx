@@ -1,6 +1,7 @@
 import { Tabs, router } from 'expo-router';
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors, Shadows } from '@/constants/colors';
@@ -15,6 +16,8 @@ const TAB_CONFIG = [
 
 // Custom Tab Bar with floating center button
 function CustomTabBar({ state, descriptors, navigation }: any) {
+  const insets = useSafeAreaInsets();
+  
   // Filter only our main tabs
   const mainRoutes = state.routes.filter((r: any) => 
     TAB_CONFIG.some(t => t.name === r.name)
@@ -63,7 +66,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
   };
 
   return (
-    <View style={styles.tabBarContainer}>
+    <View style={[styles.tabBarContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
       <View style={styles.tabBar}>
         {/* Left tabs (Home, History) */}
         {leftTabs.map(renderTab)}
@@ -128,7 +131,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 20,
     paddingHorizontal: 20,
     backgroundColor: 'transparent',
   },
